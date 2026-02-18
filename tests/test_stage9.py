@@ -134,3 +134,93 @@ class TestSoCWiring:
         # SHA3 STATUS at offset 0x01
         assert soc.bus.read(base + MMIO_SHA3 + 0x01) & 0x80
         # TRNG STATUS at offset 0x01
+        assert soc.bus.read(base + MMIO_TRNG + 0x01) & 0x80
+        # NTT STATUS at offset 0x01
+        assert soc.bus.read(base + MMIO_NTT + 0x01) & 0x80
+        # KEM STATUS at offset 0x01
+        assert soc.bus.read(base + MMIO_KEM + 0x01) & 0x80
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  STAGE B — Interrupt Plumbing
+# ═════════════════════════════════════════════════════════════════════
+
+class TestTimerIRQ:
+    """Timer fires and delivers IVEC_TIMER trap to MP64 core."""
+
+    def test_timer_fires_on_step(self):
+        """Timer countdown reaches 0 and fires IRQ pending."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        soc.timer.reload = 5
+        soc.timer.count = 5
+        soc.timer.ctrl = 0x03  # enable + auto-reload
+        for _ in range(5):
+            soc.timer.tick()
+        assert soc.timer.ctrl & 0x04  # IRQ pending
+
+    def test_timer_irq_delivered_to_core(self):
+        """When timer fires and IE=1, core takes IVEC_TIMER trap."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        core = soc.mp64.cores[0]
+
+        # Build an IVT — vector 7 (TIMER) points to handler at 0x1000
+        handler_addr = 0x1000
+        struct.pack_into("<Q", mem, 7 * 8, handler_addr)
+
+        # Handler: just HALT
+        mem[handler_addr] = 0x02  # HALT
+
+        # Main program at 0x0200: set IVT, set SP, enable interrupts, loop
+        code_base = 0x0200
+        prog = b""
+        prog += asm.ldi64(2, 0xFFF0)      # SP = 0xFFF0
+        prog += asm.sep(0)                 # P=R0 (already is, but explicit)
+        prog += asm.ldi64(5, 0x0000)       # R5 = IVT base (address 0)
+        prog += asm.csrw(5, 0x04)          # CSR[0x04] = IVT_BASE = R5
+        prog += asm.ei()                   # enable interrupts
+        # Busy loop: NOP forever (timer will interrupt)
+        loop_start = len(prog)
+        prog += asm.nop()
+        prog += asm.br(asm.AL, 0xFF - 1)   # branch back (offset -2 from end)
+        mem[code_base:code_base + len(prog)] = prog
+
+        # Set timer to fire soon
+        soc.timer.reload = 3
+        soc.timer.count = 3
+        soc.timer.ctrl = 0x03  # enable + auto-reload
+
+        # Point PC to code
+        core.regs[0] = code_base
+
+        # Run — timer fires, core traps to handler, HALT
+        soc.run(200)
+        assert core.halted
+        # Core should have ended at the handler
+        assert core.ivec_id == IVEC_TIMER
+
+    def test_timer_irq_not_delivered_when_di(self):
+        """Timer fires but IE=0 — core does NOT trap."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        core = soc.mp64.cores[0]
+
+        # Don't enable interrupts, just run a short program then halt
+        prog = b""
+        prog += asm.nop()
+        prog += asm.nop()
+        prog += asm.nop()
+        prog += asm.halt()
+        mem[:len(prog)] = prog
+
+        soc.timer.count = 1
+        soc.timer.ctrl = 0x03
+        soc.run(100)
+        assert core.halted
+        assert core.ivec_id == 0  # no trap was delivered
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  STAGE C — Boot Protocol
+# ═════════════════════════════════════════════════════════════════════
