@@ -224,3 +224,135 @@ class TestTimerIRQ:
 # ═════════════════════════════════════════════════════════════════════
 #  STAGE C — Boot Protocol
 # ═════════════════════════════════════════════════════════════════════
+
+class TestBootProtocol:
+    """Core 0 boots from reset vector, runs boot ROM code."""
+
+    def test_core0_starts_at_reset_vector(self):
+        """After SoC creation, Core 0 PC = 0 (reset vector)."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        assert soc.mp64.cores[0].pc == 0
+
+    def test_boot_rom_halt(self):
+        """Simplest boot ROM: HALT at address 0."""
+        mem = bytearray(1 << 16)
+        mem[0] = 0x02  # HALT
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        soc.run(10)
+        assert soc.mp64.cores[0].halted
+
+    def test_boot_rom_uart_banner(self):
+        """Boot ROM writes a string to UART, then halts."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        core = soc.mp64.cores[0]
+        base = core.mmio_start
+
+        banner = "OK\n"
+        # Build boot code at address 0
+        prog = b""
+        prog += asm.ldi64(3, base + MMIO_UART)  # R3 = UART TX addr
+        for ch in banner:
+            prog += asm.ldi(4, ord(ch))
+            prog += asm.st_b(3, 4)
+        prog += asm.halt()
+        mem[:len(prog)] = prog
+
+        soc.run(200)
+        assert core.halted
+        assert soc.uart_output() == banner
+
+    def test_boot_sets_ivt_and_sp(self):
+        """Boot ROM sets IVT base and stack pointer."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        core = soc.mp64.cores[0]
+
+        ivt_addr = 0x2000
+        sp_val = 0xFF00
+
+        prog = b""
+        prog += asm.ldi64(2, sp_val)       # R2 = SP
+        prog += asm.ldi64(5, ivt_addr)     # R5 = IVT base
+        prog += asm.csrw(5, 0x04)          # CSR[0x04] = IVT_BASE
+        prog += asm.halt()
+        mem[:len(prog)] = prog
+
+        soc.run(100)
+        assert core.halted
+        assert core.sp == sp_val
+        assert core.ivt_base == ivt_addr
+
+    def test_boot_reads_sysinfo(self):
+        """Boot ROM reads BOARD_ID from SysInfo device."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        core = soc.mp64.cores[0]
+        base = core.mmio_start
+
+        # Read BOARD_ID low 16-bits (at SysInfo+0x00) into R6
+        prog = b""
+        prog += asm.ldi64(3, base + MMIO_SYSINFO)
+        prog += asm.ld_h(6, 3)    # R6 = 16-bit load from [R3]
+        prog += asm.halt()
+        mem[:len(prog)] = prog
+
+        soc.run(100)
+        assert core.halted
+        # BOARD_ID low 16 bits: "CH" in LE = 0x4843
+        expected_lo16 = soc.sysinfo._regs[0x00] & 0xFFFF
+        assert core.regs[6] == expected_lo16
+
+    def test_boot_loads_from_storage(self):
+        """Boot ROM reads sector 0 from storage into RAM via DMA."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        core = soc.mp64.cores[0]
+        base = core.mmio_start
+
+        # Pre-populate storage sector 0 with a known pattern
+        from chimera.devices.storage import SECTOR_SIZE
+        payload = bytes(range(256)) * (SECTOR_SIZE // 256)
+        soc.storage.write_sectors(0, 1, payload)
+
+        # DMA target address in RAM
+        dma_target = 0x4000
+
+        # Boot code: set sector=0, DMA addr=dma_target, CMD=READ
+        prog = b""
+        prog += asm.ldi64(3, base + MMIO_STORAGE)
+
+        # Sector number = 0 (32-bit at offset 0x02..0x05)
+        prog += asm.ldi(4, 0)
+        prog += asm.ldi64(5, base + MMIO_STORAGE + 0x02)
+        prog += asm.st_b(5, 4)
+
+        # DMA address (64-bit at offset 0x06..0x0D)
+        prog += asm.ldi64(5, base + MMIO_STORAGE + 0x06)
+        prog += asm.ldi64(6, dma_target)
+        # Store 64-bit dma addr byte-by-byte (simpler with st_b loop)
+        for i in range(8):
+            prog += asm.ldi64(7, base + MMIO_STORAGE + 0x06 + i)
+            byte_val = (dma_target >> (i * 8)) & 0xFF
+            prog += asm.ldi(4, byte_val)
+            prog += asm.st_b(7, 4)
+
+        # CMD = 0x01 (READ) at offset 0x00
+        prog += asm.ldi64(5, base + MMIO_STORAGE + 0x00)
+        prog += asm.ldi(4, 0x01)
+        prog += asm.st_b(5, 4)
+
+        prog += asm.halt()
+        mem[:len(prog)] = prog
+
+        soc.run(1000)
+        assert core.halted
+        # Verify data landed at dma_target
+        for i in range(256):
+            assert mem[dma_target + i] == i, f"byte {i} mismatch"
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  STAGE D — Assembly BIOS
+# ═════════════════════════════════════════════════════════════════════
