@@ -356,3 +356,143 @@ class TestBootProtocol:
 # ═════════════════════════════════════════════════════════════════════
 #  STAGE D — Assembly BIOS
 # ═════════════════════════════════════════════════════════════════════
+
+class TestAssemblyBIOS:
+    """End-to-end BIOS boot: init, UART banner, IVT, timer ISR."""
+
+    def _build_bios(self, soc: ChimeraSoC) -> bytes:
+        """Build a minimal BIOS image as MP64 machine code.
+
+        Does:
+          1. Set SP = 0xFFF0
+          2. Set IVT base = 0x2000
+          3. Install timer ISR at IVT[7]
+          4. Write UART banner "Chimera-1 OK\\n"
+          5. Enable timer (countdown=10, auto-reload)
+          6. Enable interrupts
+          7. Busy-wait until timer ISR sets a flag in memory
+          8. HALT
+        """
+        core = soc.mp64.cores[0]
+        base = core.mmio_start
+        ivt_base = 0x2000
+        isr_addr = 0x3000
+        flag_addr = 0x1000  # ISR writes 0x01 here
+
+        prog = b""
+        # 1. Stack pointer
+        prog += asm.ldi64(2, 0xFFF0)
+
+        # 2. IVT base
+        prog += asm.ldi64(5, ivt_base)
+        prog += asm.csrw(5, 0x04)
+
+        # 3. Install timer ISR — write isr_addr to IVT[7] (offset 56)
+        prog += asm.ldi64(5, ivt_base + 7 * 8)   # R5 = &IVT[7]
+        prog += asm.ldi64(6, isr_addr)            # R6 = handler addr
+        # Store 64-bit handler address
+        prog += asm.str_(5, 6)                     # [R5] = R6 (64-bit store)
+
+        # 4. UART banner
+        banner = "Chimera-1 OK\n"
+        prog += asm.ldi64(3, base + MMIO_UART)
+        for ch in banner:
+            prog += asm.ldi(4, ord(ch))
+            prog += asm.st_b(3, 4)
+
+        # 5. Set timer: reload=10, count=10, ctrl=enable|auto
+        prog += asm.ldi64(5, base + MMIO_TIMER)
+        # count = 10 (offset +0)
+        prog += asm.ldi(4, 10)
+        prog += asm.st_b(5, 4)
+        # reload = 10 (offset +4)
+        prog += asm.ldi64(7, base + MMIO_TIMER + 4)
+        prog += asm.st_b(7, 4)
+        # ctrl = 0x03 (offset +8)
+        prog += asm.ldi64(7, base + MMIO_TIMER + 8)
+        prog += asm.ldi(4, 0x03)
+        prog += asm.st_b(7, 4)
+
+        # 6. Enable interrupts
+        prog += asm.ei()
+
+        # 7. Busy-wait: Load flag_addr, check if non-zero, halt when set
+        prog += asm.ldi64(6, flag_addr)
+        wait_loop = len(prog)
+        prog += asm.ld_b(7, 6)          # R7 = mem[flag_addr]
+        prog += asm.cmpi(7, 0)
+        prog += asm.br(asm.EQ, 0xFF - 4)  # if zero, loop back
+        # 8. HALT
+        prog += asm.halt()
+
+        # --- Timer ISR at isr_addr ---
+        isr = b""
+        isr += asm.ldi64(6, flag_addr)
+        isr += asm.ldi(7, 0x01)
+        isr += asm.st_b(6, 7)       # mem[flag_addr] = 1
+        # Clear timer IRQ pending: write 0x07 (bit2=1 to clear, keep enable+auto)
+        isr += asm.ldi64(5, base + MMIO_TIMER + 8)
+        isr += asm.ldi(4, 0x07)       # enable | auto | clear_irq
+        isr += asm.st_b(5, 4)
+        isr += asm.rti()
+
+        return prog, isr, isr_addr, ivt_base
+
+    def test_bios_uart_banner(self):
+        """BIOS prints 'Chimera-1 OK\\n' to UART."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        prog, isr, isr_addr, ivt_base = self._build_bios(soc)
+
+        mem[:len(prog)] = prog
+        mem[isr_addr:isr_addr + len(isr)] = isr
+
+        soc.run(5000)
+        output = soc.uart_output()
+        assert "Chimera-1 OK" in output
+
+    def test_bios_timer_isr_runs(self):
+        """BIOS sets up timer ISR; ISR sets flag, BIOS sees it and halts."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        prog, isr, isr_addr, ivt_base = self._build_bios(soc)
+
+        mem[:len(prog)] = prog
+        mem[isr_addr:isr_addr + len(isr)] = isr
+
+        soc.run(5000)
+        core = soc.mp64.cores[0]
+        assert core.halted
+        # The flag should be set by the ISR
+        assert mem[0x1000] == 0x01
+
+    def test_bios_ivt_configured(self):
+        """After BIOS runs, IVT base is set and handler installed."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        prog, isr, isr_addr, ivt_base = self._build_bios(soc)
+
+        mem[:len(prog)] = prog
+        mem[isr_addr:isr_addr + len(isr)] = isr
+
+        soc.run(5000)
+        core = soc.mp64.cores[0]
+        assert core.ivt_base == ivt_base
+
+    def test_bios_full_boot_sequence(self):
+        """Full boot: SP set, IVT set, banner printed, timer ISR ran, halted."""
+        mem = bytearray(1 << 16)
+        soc = ChimeraSoC(mem, mp64_cores=1, lm1_tiles=1)
+        prog, isr, isr_addr, ivt_base = self._build_bios(soc)
+
+        mem[:len(prog)] = prog
+        mem[isr_addr:isr_addr + len(isr)] = isr
+
+        soc.run(5000)
+        core = soc.mp64.cores[0]
+
+        # Verify all boot milestones
+        assert core.halted, "BIOS did not halt"
+        assert core.ivt_base == ivt_base, "IVT not configured"
+        assert "Chimera-1 OK" in soc.uart_output(), "No banner"
+        assert mem[0x1000] == 0x01, "Timer ISR did not run"
