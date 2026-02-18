@@ -3,9 +3,12 @@
 CC ?= gcc
 CFLAGS = -O3 -march=native -shared -fPIC -Wall -Wextra
 
-accel: accel/chimera_accel.so
+accel: accel/chimera_accel.so accel/lm1_accel.so
 
 accel/chimera_accel.so: accel/mp64_accel.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+accel/lm1_accel.so: accel/lm1_accel.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 test: accel
