@@ -65,6 +65,7 @@ class MP64Core:
         "mpu_base", "mpu_limit",
         "ivec_id", "trap_addr",
         "tsrc0", "tsrc1", "tdst", "tmode", "tctrl", "acc",
+        "tstride_r", "tstride_c", "ttile_h", "ttile_w",
         "perf_en", "perf_cycles", "perf_stalls",
         "perf_tileops", "perf_extmem",
         "port_in", "port_out",
@@ -114,6 +115,11 @@ class MP64Core:
         self.tmode = 0
         self.tctrl = 0
         self.acc = [0, 0, 0, 0]
+        # Tile 2D
+        self.tstride_r = 0
+        self.tstride_c = 0
+        self.ttile_h = 1
+        self.ttile_w = 64
         # Perf
         self.perf_en = 0
         self.perf_cycles = 0
@@ -336,6 +342,11 @@ class MP64Core:
         if a == 0x1A: return self.acc[1]
         if a == 0x1B: return self.acc[2]
         if a == 0x1C: return self.acc[3]
+        # Tile 2D
+        if a == 0x40: return self.tstride_r
+        if a == 0x41: return self.tstride_c
+        if a == 0x42: return self.ttile_h
+        if a == 0x43: return self.ttile_w
         # Core identity
         if a == 0x20: return self.core_id
         if a == 0x21: return self.n_cores
@@ -376,6 +387,10 @@ class MP64Core:
         elif a == 0x1A: self.acc[1] = v
         elif a == 0x1B: self.acc[2] = v
         elif a == 0x1C: self.acc[3] = v
+        elif a == 0x40: self.tstride_r = v
+        elif a == 0x41: self.tstride_c = v
+        elif a == 0x42: self.ttile_h = v & 0xFF
+        elif a == 0x43: self.ttile_w = v & 0xFF
         elif a == 0x6C:
             self.perf_en = v & 1
             if v & 2:  # reset
@@ -988,16 +1003,113 @@ class MP64Core:
             self._csr_write(addr, self.regs[reg])
         return pc, 2
 
-    # -- 0xE  MEX (tile engine, stub) -------------------------------------
+    # -- 0xE  MEX (tile engine) ---------------------------------------------
+
+    # Tile I/O helpers
+    def _tile_rd(self, addr: int, eb: int, n: int) -> list[int]:
+        """Read *n* elements of *eb* bytes each from memory."""
+        rd = {1: self._r8, 2: self._r16, 4: self._r32, 8: self._r64}[eb]
+        return [rd((addr + i * eb) & MASK64) for i in range(n)]
+
+    def _tile_wr(self, addr: int, eb: int, elems: list[int], em: int):
+        wr = {1: self._w8, 2: self._w16, 4: self._w32, 8: self._w64}[eb]
+        for i, v in enumerate(elems):
+            wr((addr + i * eb) & MASK64, v & em)
+
     def _x_mex(self, n: int, pc: int, ext: int) -> tuple[int, int]:
-        # Consume the function byte
-        _funct = self.mem[pc % self.mem_size]
+        funct = self.mem[pc % self.mem_size]
         pc = (pc + 1) & MASK64
-        # Tile engine ops are implemented in Stage 3.
-        # For now, increment tile-ops counter and return.
+
+        ss = (n >> 2) & 3        # element-size selector
+        op = n & 3               # operation group
+        eb = 1 << ss             # element bytes: 1, 2, 4, 8
+        ne = 64 // eb            # elements per tile: 64, 32, 16, 8
+        em = (1 << (eb * 8)) - 1 # element mask
+
+        if op == 0:
+            self._mex_talu(funct, eb, ne, em)
+        elif op == 1:
+            self._mex_tmul(funct, eb, ne, em)
+        elif op == 2:
+            self._mex_tred(funct, eb, ne, em)
+        elif op == 3:
+            self._mex_tsys(funct, eb, ne, em, ext)
+
         if self.perf_en:
             self.perf_tileops += 1
-        return pc, 2
+        return pc, 4
+
+    # TALU: element-wise arithmetic (op=0)
+    def _mex_talu(self, fn: int, eb: int, ne: int, em: int):
+        s0 = self._tile_rd(self.tsrc0, eb, ne)
+        s1 = self._tile_rd(self.tsrc1, eb, ne)
+        if fn == 0:    dst = [(a + b) & em for a, b in zip(s0, s1)]
+        elif fn == 1:  dst = [(a - b) & em for a, b in zip(s0, s1)]
+        elif fn == 2:  dst = [(a * b) & em for a, b in zip(s0, s1)]
+        elif fn == 3:  dst = [min(a, b) for a, b in zip(s0, s1)]
+        elif fn == 4:  dst = [max(a, b) for a, b in zip(s0, s1)]
+        elif fn == 5:  dst = [int(a > b) - int(a < b) for a, b in zip(s0, s1)]
+        elif fn == 6:  dst = [abs(a - b) & em for a, b in zip(s0, s1)]
+        elif fn == 7:  # CLAMP to [ACC0, ACC1]
+            lo, hi = self.acc[0] & em, self.acc[1] & em
+            dst = [max(lo, min(hi, a)) for a in s0]
+        else:
+            dst = s0
+        self._tile_wr(self.tdst, eb, dst, em)
+
+    # TMUL: multiply variants (op=1)
+    def _mex_tmul(self, fn: int, eb: int, ne: int, em: int):
+        s0 = self._tile_rd(self.tsrc0, eb, ne)
+        s1 = self._tile_rd(self.tsrc1, eb, ne)
+        if fn == 0:    # MUL
+            self._tile_wr(self.tdst, eb,
+                          [(a * b) & em for a, b in zip(s0, s1)], em)
+        elif fn == 1:  # DOT product → scalar to ACC0
+            self.acc[0] = sum(a * b for a, b in zip(s0, s1)) & MASK64
+        elif fn == 2:  # WMUL (low bits)
+            self._tile_wr(self.tdst, eb,
+                          [(a * b) & em for a, b in zip(s0, s1)], em)
+        elif fn == 3:  # MAC  dst += s0 * s1
+            old = self._tile_rd(self.tdst, eb, ne)
+            self._tile_wr(self.tdst, eb,
+                          [(o + a * b) & em for o, a, b in zip(old, s0, s1)], em)
+        elif fn == 4:  # FMA  s0 * s1 + dst
+            old = self._tile_rd(self.tdst, eb, ne)
+            self._tile_wr(self.tdst, eb,
+                          [(a * b + o) & em for o, a, b in zip(old, s0, s1)], em)
+        elif fn == 5:  # DOTACC  ACC0 += dot(s0, s1)
+            self.acc[0] = (self.acc[0] + sum(a * b for a, b in zip(s0, s1))) & MASK64
+
+    # TRED: reductions (op=2)
+    def _mex_tred(self, fn: int, eb: int, ne: int, em: int):
+        s = self._tile_rd(self.tsrc0, eb, ne)
+        if fn == 0:    r = sum(s) & MASK64
+        elif fn == 1:  r = min(s)
+        elif fn == 2:  r = max(s)
+        elif fn == 3:  r = sum(bin(x).count('1') for x in s)
+        elif fn == 4:  r = sum(s) & MASK64   # L1 (unsigned)
+        elif fn == 5:  r = sum(x * x for x in s) & MASK64
+        elif fn == 6:  r = s.index(min(s))
+        elif fn == 7:  r = s.index(max(s))
+        else:          r = 0
+        self.acc[0] = r & MASK64
+
+    # TSYS: system / data-movement (op=3)
+    def _mex_tsys(self, fn: int, eb: int, ne: int, em: int, ext: int):
+        if fn == 0:    # TRANS (reverse as placeholder for real transpose)
+            s = self._tile_rd(self.tsrc0, eb, ne)
+            self._tile_wr(self.tdst, eb, list(reversed(s)), em)
+        elif fn == 1:  # SHUFFLE (indices from src1)
+            s0 = self._tile_rd(self.tsrc0, eb, ne)
+            idx = self._tile_rd(self.tsrc1, eb, ne)
+            self._tile_wr(self.tdst, eb, [s0[i % ne] for i in idx], em)
+        elif fn == 2:  # MOVBANK (copy src0 → dst)
+            s = self._tile_rd(self.tsrc0, eb, ne)
+            self._tile_wr(self.tdst, eb, s, em)
+        elif fn == 3:  # LOADC (broadcast ACC0)
+            self._tile_wr(self.tdst, eb, [self.acc[0] & em] * ne, em)
+        elif fn == 4:  # ZERO
+            self._tile_wr(self.tdst, eb, [0] * ne, em)
 
     # =====================================================================
     #  C ACCELERATION

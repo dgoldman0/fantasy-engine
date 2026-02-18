@@ -211,6 +211,53 @@ def csrw(rs: int, addr: int) -> bytes:
     return bytes([0xD8 | (rs & 0x7), addr & 0xff])
 
 # -----------------------------------------------------------------------
+#  Family E — MEX (tile engine)
+# -----------------------------------------------------------------------
+# Encoding: 0xEn funct — n = [ss:2][op:2]
+#   ss = element size (0=8b, 1=16b, 2=32b, 3=64b)
+#   op = group (0=TALU, 1=TMUL, 2=TRED, 3=TSYS)
+def _mex(ss: int, op: int, funct: int) -> bytes:
+    n = ((ss & 3) << 2) | (op & 3)
+    return bytes([0xE0 | n, funct & 0xFF])
+
+# Element-size constants
+SZ8 = 0; SZ16 = 1; SZ32 = 2; SZ64 = 3
+
+# TALU (op=0)
+def talu_add(ss: int) -> bytes: return _mex(ss, 0, 0)
+def talu_sub(ss: int) -> bytes: return _mex(ss, 0, 1)
+def talu_mul(ss: int) -> bytes: return _mex(ss, 0, 2)
+def talu_min(ss: int) -> bytes: return _mex(ss, 0, 3)
+def talu_max(ss: int) -> bytes: return _mex(ss, 0, 4)
+def talu_cmp(ss: int) -> bytes: return _mex(ss, 0, 5)
+def talu_abs(ss: int) -> bytes: return _mex(ss, 0, 6)
+def talu_clamp(ss: int) -> bytes: return _mex(ss, 0, 7)
+
+# TMUL (op=1)
+def tmul_mul(ss: int) -> bytes: return _mex(ss, 1, 0)
+def tmul_dot(ss: int) -> bytes: return _mex(ss, 1, 1)
+def tmul_wmul(ss: int) -> bytes: return _mex(ss, 1, 2)
+def tmul_mac(ss: int) -> bytes: return _mex(ss, 1, 3)
+def tmul_fma(ss: int) -> bytes: return _mex(ss, 1, 4)
+def tmul_dotacc(ss: int) -> bytes: return _mex(ss, 1, 5)
+
+# TRED (op=2)
+def tred_sum(ss: int) -> bytes: return _mex(ss, 2, 0)
+def tred_rmin(ss: int) -> bytes: return _mex(ss, 2, 1)
+def tred_rmax(ss: int) -> bytes: return _mex(ss, 2, 2)
+def tred_popcnt(ss: int) -> bytes: return _mex(ss, 2, 3)
+def tred_sumsq(ss: int) -> bytes: return _mex(ss, 2, 5)
+def tred_minidx(ss: int) -> bytes: return _mex(ss, 2, 6)
+def tred_maxidx(ss: int) -> bytes: return _mex(ss, 2, 7)
+
+# TSYS (op=3)
+def tsys_trans(ss: int) -> bytes: return _mex(ss, 3, 0)
+def tsys_shuffle(ss: int) -> bytes: return _mex(ss, 3, 1)
+def tsys_movbank(ss: int) -> bytes: return _mex(ss, 3, 2)
+def tsys_loadc(ss: int) -> bytes: return _mex(ss, 3, 3)
+def tsys_zero(ss: int) -> bytes: return _mex(ss, 3, 4)
+
+# -----------------------------------------------------------------------
 #  Family F — EXT prefix
 # -----------------------------------------------------------------------
 def ext(modifier: int) -> bytes:
