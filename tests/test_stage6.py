@@ -1,6 +1,6 @@
 """Stage 6: Crypto accelerator tests.
 
-Tests for CRC, AES, SHA3, TRNG, X25519, NTT, KEM, FieldALU devices.
+Tests for CRC, AES, SHA3, TRNG, NTT, KEM, FieldALU (incl. X25519 mode) devices.
 """
 from __future__ import annotations
 import struct, zlib, hashlib, os
@@ -10,7 +10,6 @@ from chimera.devices.crc import CRC
 from chimera.devices.aes import AES
 from chimera.devices.sha3 import SHA3
 from chimera.devices.trng import TRNG
-from chimera.devices.x25519 import X25519
 from chimera.devices.ntt import NTT
 from chimera.devices.kem import KEM
 from chimera.devices.field_alu import FieldALU
@@ -211,45 +210,79 @@ class TestTRNG:
 
 
 # ═════════════════════════════════════════════════════════════════════
-#  X25519
+#  FieldALU — X25519 mode (mode 0, backward-compatible)
 # ═════════════════════════════════════════════════════════════════════
 
-class TestX25519:
+class TestFieldALU_X25519:
+    """X25519 scalar multiplication via FieldALU mode 0."""
+
+    def _write_scalar(self, fa, data: bytes):
+        for i, b in enumerate(data):
+            fa.write8(0x00 + i, b)  # OPERAND_A
+
+    def _write_point(self, fa, data: bytes):
+        for i, b in enumerate(data):
+            fa.write8(0x20 + i, b)  # OPERAND_B
+
+    def _go(self, fa, mode=0):
+        cmd = ((mode & 0xF) << 1) | 1  # go bit
+        fa.write8(0x40, cmd)
+
+    def _read_result(self, fa) -> bytes:
+        return bytes(fa.read8(0x08 + i) for i in range(32))
+
     def test_present_bit(self):
-        x = X25519()
-        assert x.read8(0x01) & 0x80
+        fa = FieldALU()
+        assert fa.read8(0x00) & 0x80  # present in STATUS
 
-    def test_scalar_readback(self):
-        """Scalar writable and readable."""
-        x = X25519()
+    def test_operand_a_writable(self):
+        """Operand A (scalar) writable."""
+        fa = FieldALU()
         for i in range(32):
-            x.write8(0x04 + i, i + 1)
+            fa.write8(0x00 + i, i + 1)
         for i in range(32):
-            assert x.read8(0x04 + i) == i + 1
+            assert fa._operand_a[i] == i + 1
 
-    def test_compute_produces_result(self):
-        """COMPUTE produces a non-zero result."""
-        x = X25519()
-        # Set scalar and point to non-zero
-        for i in range(32):
-            x.write8(0x04 + i, 0xAA)
-            x.write8(0x24 + i, 0xBB)
-        x.write8(0x00, 0x01)  # COMPUTE
-        result = bytes(x.read8(0x44 + i) for i in range(32))
+    def test_x25519_produces_result(self):
+        """Mode 0 (X25519) produces a non-zero result."""
+        fa = FieldALU()
+        self._write_scalar(fa, bytes([0xAA] * 32))
+        self._write_point(fa, bytes([0xBB] * 32))
+        self._go(fa, mode=0)
+        result = self._read_result(fa)
         assert result != bytes(32)
-        assert x.ops_done == 1
+        assert fa.ops_done == 1
 
-    def test_deterministic(self):
+    def test_x25519_deterministic(self):
         """Same inputs produce same output."""
         results = []
         for _ in range(2):
-            x = X25519()
-            for i in range(32):
-                x.write8(0x04 + i, 0x42)
-                x.write8(0x24 + i, 0x43)
-            x.write8(0x00, 0x01)
-            results.append(bytes(x.read8(0x44 + i) for i in range(32)))
+            fa = FieldALU()
+            self._write_scalar(fa, bytes([0x42] * 32))
+            self._write_point(fa, bytes([0x43] * 32))
+            self._go(fa, mode=0)
+            results.append(self._read_result(fa))
         assert results[0] == results[1]
+
+    def test_x25519_rfc7748_basepoint(self):
+        """X25519 with basepoint u=9 matches RFC 7748 test vector."""
+        fa = FieldALU()
+        # Scalar from RFC 7748 §6.1 (Alice's private key)
+        scalar = bytes.fromhex(
+            "77076d0a7318a57d3c16c17251b26645"
+            "df4c2f87ebc0992ab177fba51db92c2a"
+        )
+        # Basepoint u = 9
+        point = b'\x09' + b'\x00' * 31
+        self._write_scalar(fa, scalar)
+        self._write_point(fa, point)
+        self._go(fa, mode=0)
+        result = self._read_result(fa)
+        expected = bytes.fromhex(
+            "8520f0098930a754748b7ddcb43ef75a"
+            "0dbf3a0d26381af4eba4a98eaa9b4e6a"
+        )
+        assert result == expected
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -316,31 +349,85 @@ class TestKEM:
 
 
 # ═════════════════════════════════════════════════════════════════════
-#  FieldALU
+#  FieldALU — arithmetic modes
 # ═════════════════════════════════════════════════════════════════════
 
 class TestFieldALU:
+    def _set_a(self, fa, val: int):
+        bs = val.to_bytes(32, 'little')
+        for i, b in enumerate(bs):
+            fa.write8(0x00 + i, b)
+
+    def _set_b(self, fa, val: int):
+        bs = val.to_bytes(32, 'little')
+        for i, b in enumerate(bs):
+            fa.write8(0x20 + i, b)
+
+    def _go(self, fa, mode: int):
+        fa.write8(0x40, ((mode & 0xF) << 1) | 1)
+
+    def _result_lo(self, fa) -> int:
+        return int.from_bytes(bytes(fa.read8(0x08 + i) for i in range(32)), 'little')
+
+    def _result_hi(self, fa) -> int:
+        return int.from_bytes(bytes(fa.read8(0x28 + i) for i in range(32)), 'little')
+
     def test_present_bit(self):
-        assert FieldALU().read8(0x01) & 0x80
+        assert FieldALU().read8(0x00) & 0x80
 
-    def test_opsize_readback(self):
+    def test_fadd(self):
+        """Mode 1: field addition mod p25519."""
         fa = FieldALU()
-        fa.write8(0x02, 64)  # 512-bit
-        assert fa.read8(0x02) == 64
+        p = (1 << 255) - 19
+        self._set_a(fa, p - 5)
+        self._set_b(fa, 10)
+        self._go(fa, 1)  # FADD
+        assert self._result_lo(fa) == 5  # (p-5+10) mod p == 5
 
-    def test_dma_addrs(self):
-        """All 4 DMA address registers work."""
+    def test_fsub(self):
+        """Mode 2: field subtraction mod p25519."""
         fa = FieldALU()
-        for base in (0x04, 0x0C, 0x14, 0x1C):
-            for i in range(8):
-                fa.write8(base + i, base + i)
-            for i in range(8):
-                assert fa.read8(base + i) == base + i
+        self._set_a(fa, 100)
+        self._set_b(fa, 30)
+        self._go(fa, 2)  # FSUB
+        assert self._result_lo(fa) == 70
 
-    def test_cmd_counts_ops(self):
+    def test_fmul(self):
+        """Mode 3: field multiplication mod p25519."""
         fa = FieldALU()
-        fa.write8(0x00, 0x01)  # MOD_ADD
-        fa.write8(0x00, 0x03)  # MOD_MUL
+        self._set_a(fa, 7)
+        self._set_b(fa, 13)
+        self._go(fa, 3)  # FMUL
+        assert self._result_lo(fa) == 91
+
+    def test_mul_raw(self):
+        """Mode 7: raw 256x256->512-bit multiply."""
+        fa = FieldALU()
+        a = (1 << 200)
+        b = (1 << 200)
+        self._set_a(fa, a)
+        self._set_b(fa, b)
+        self._go(fa, 7)  # MUL_RAW
+        lo = self._result_lo(fa)
+        hi = self._result_hi(fa)
+        assert (hi << 256) | lo == a * b
+
+    def test_status_done_bit(self):
+        """STATUS done bit set after compute."""
+        fa = FieldALU()
+        self._set_a(fa, 1)
+        self._set_b(fa, 1)
+        self._go(fa, 1)  # FADD
+        st = fa.read8(0x00)
+        assert st & 0x02  # done
+        assert not (st & 0x01)  # not busy
+
+    def test_ops_counted(self):
+        fa = FieldALU()
+        self._set_a(fa, 1)
+        self._set_b(fa, 2)
+        self._go(fa, 1)
+        self._go(fa, 2)
         assert fa.ops_done == 2
 
 
@@ -350,19 +437,18 @@ class TestFieldALU:
 
 class TestCryptoBusRegistration:
     def test_all_crypto_on_bus(self):
-        """All 8 crypto devices registered at non-overlapping MMIO offsets."""
+        """All 7 crypto devices registered at non-overlapping MMIO offsets."""
         bus = DeviceBus()
         # Layout: CRC(32B), AES(128B), SHA3(64B), TRNG(64B),
-        #         X25519(128B), NTT(64B), KEM(64B), FieldALU(64B)
+        #         FieldALU(72B, incl. X25519 mode), NTT(64B), KEM(64B)
         layout = [
             (0x07C0, 0x20,  CRC()),       # +0x07C0..0x07DF
             (0x0800, 0x80,  AES()),       # +0x0800..0x087F
             (0x0880, 0x40,  SHA3()),      # +0x0880..0x08BF
             (0x08C0, 0x40,  TRNG()),      # +0x08C0..0x08FF
-            (0x0900, 0x80,  X25519()),    # +0x0900..0x097F
+            (0x0900, 0x48,  FieldALU()),  # +0x0900..0x0947
             (0x0980, 0x40,  NTT()),       # +0x0980..0x09BF
             (0x09C0, 0x40,  KEM()),       # +0x09C0..0x09FF
-            (0x0A00, 0x40,  FieldALU()),  # +0x0A00..0x0A3F
         ]
         for off, sz, dev in layout:
             bus.register(off, sz, dev)
@@ -373,10 +459,9 @@ class TestCryptoBusRegistration:
             (0x0800, 0x2D),   # AES
             (0x0880, 0x01),   # SHA3
             (0x08C0, 0x01),   # TRNG
-            (0x0900, 0x01),   # X25519
+            (0x0900, 0x00),   # FieldALU (STATUS at offset 0x00)
             (0x0980, 0x01),   # NTT
             (0x09C0, 0x01),   # KEM
-            (0x0A00, 0x01),   # FieldALU
         ]
         for dev_off, status_off in status_checks:
             val = bus.read(base + dev_off + status_off)
