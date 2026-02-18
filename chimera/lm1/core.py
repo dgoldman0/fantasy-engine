@@ -14,7 +14,7 @@ from .tagged import (
     MASK64, NIL, is_fixnum, is_ref, is_cons, is_special,
     is_truthy, tag_fixnum, untag_fixnum, tag_ref, untag_ref,
     tag_cons, untag_cons, make_header, header_size, header_type,
-    HDR_CONS, HDR_INSTANCE,
+    HDR_CONS, HDR_INSTANCE, HDR_CLOSURE,
 )
 
 # ── Trap codes ───────────────────────────────────────────────────────
@@ -35,9 +35,12 @@ OP_CMP_TAGGED = 4
 OP_ALLOC = 8; OP_ALLOC_CONS = 9;  OP_ALLOCV = 10;     OP_ALLOC_CLOSURE = 11
 OP_LD = 16;   OP_LD_CAR_CDR = 17; OP_ST = 18;          OP_ST_WB = 19
 OP_ST_CAR_CDR = 20
+OP_CALL_IC = 24;  OP_IC_INSTALL = 25
 OP_CALL_DIRECT = 26;  OP_CALL_CLOSURE = 27;  OP_RET = 28
+OP_TAILCALL_IC = 29
 OP_TAILCALL_DIRECT = 30
 OP_SEND = 36; OP_RECV = 37; OP_CAS_TAGGED = 38; OP_FAA_FENCE = 39
+OP_ENQ_SCAN = 40; OP_ENQ_COPY = 41; OP_ENQ_FIXUP = 42; OP_ENQ_COMPACT = 43
 OP_ARITH_RAW = 48;   OP_BITWISE = 49;  OP_LDR = 50;   OP_STR = 51
 OP_BR = 52;   OP_BR_COND = 53;   OP_PUSH_POP = 54
 OP_LI = 55;   OP_LUI = 56;   OP_PUSH_MULTI = 57;  OP_POP_MULTI = 58
@@ -98,6 +101,10 @@ class LM1Core:
         self.header_templates = [0] * 256
         # Queues
         self.queues: list[deque] = [deque(maxlen=64) for _ in range(4)]
+        # Inline cache table: (callsite_pc, shape_id) → target_addr
+        self.ic_table: dict[tuple[int, int], int] = {}
+        # GC movement queue: list of (op, region_base, region_len) tuples
+        self.gc_queue: list[tuple[int, int, int]] = []
         # Acceleration
         self._accel_lib = None
         self._accel_run = None
@@ -376,6 +383,18 @@ class LM1Core:
                 elif tag == 4: result = (w == NIL)
                 R[rd] = T.T if result else NIL
 
+            # ── TST.SHAPE (check object shape/class id) ──────────
+            elif op == OP_TST_SHAPE:
+                w = R[rs1]
+                expected_shape = imm16
+                if is_ref(w):
+                    obj_addr = untag_ref(w)
+                    hdr = self._r64(obj_addr - 8)
+                    obj_shape = (hdr >> 24) & 0xFFFF_FFFF
+                    R[rd] = T.T if obj_shape == expected_shape else NIL
+                else:
+                    R[rd] = NIL
+
             # ── ARITH_FIX (tagged fixnum arithmetic) ─────────────
             elif op == OP_ARITH_FIX:
                 a, b = R[rs1], R[rs2]
@@ -423,6 +442,29 @@ class LM1Core:
                 payload = raw & 0x03FF_FFFF
                 alloc_rd = (payload >> 21) & 0x1F
                 R[alloc_rd] = self._alloc_cons()
+
+            # ── ALLOCV (variable-size allocation) ────────────────
+            elif op == OP_ALLOCV:
+                payload = raw & 0x03FF_FFFF
+                alloc_rd = (payload >> 21) & 0x1F
+                size_reg = (payload >> 16) & 0x1F
+                words = R[size_reg]
+                if is_fixnum(words):
+                    words = untag_fixnum(words)
+                hdr = make_header(HDR_INSTANCE, words)
+                R[alloc_rd] = self._alloc(hdr, words)
+
+            # ── ALLOC.CLOSURE ────────────────────────────────────
+            elif op == OP_ALLOC_CLOSURE:
+                payload = raw & 0x03FF_FFFF
+                alloc_rd = (payload >> 21) & 0x1F
+                code_reg = (payload >> 16) & 0x1F
+                env_words = (payload >> 6) & 0x3FF
+                hdr = make_header(HDR_CLOSURE, env_words + 1)  # +1 for code ptr
+                ref = self._alloc(hdr, env_words + 1)
+                addr = untag_ref(ref)
+                self._w64(addr, R[code_reg])  # store code pointer at slot 0
+                R[alloc_rd] = ref
 
             # ── LD (tagged field load) ───────────────────────────
             elif op == OP_LD:
@@ -483,6 +525,43 @@ class LM1Core:
                 t.lr = npc
                 npc = target
 
+            # ── CALL.IC (inline-cache call) ──────────────────────
+            elif op == OP_CALL_IC:
+                callsite = t.pc  # current PC as callsite key
+                shape_id = R[rs2] & MASK64
+                key = (callsite, shape_id)
+                if key in self.ic_table:
+                    target = self.ic_table[key]
+                    t.sp -= 8; self._w64(t.sp, npc)
+                    t.sp -= 8; self._w64(t.sp, t.fp)
+                    t.fp = t.sp
+                    t.lr = npc
+                    npc = target
+                else:
+                    raise LM1Trap(TRAP_IC_MISS)
+
+            # ── IC.INSTALL (install IC entry) ────────────────────
+            elif op == OP_IC_INSTALL:
+                entry_target = R[rs1]
+                callsite_pc = R[rs2]
+                shape_id = R[rd]
+                self.ic_table[(callsite_pc, shape_id)] = entry_target
+
+            # ── CALL.CLOSURE ─────────────────────────────────────
+            elif op == OP_CALL_CLOSURE:
+                payload = raw & 0x03FF_FFFF
+                rs = (payload >> 21) & 0x1F
+                closure = R[rs]
+                if not is_ref(closure):
+                    raise LM1Trap(TRAP_NOT_CLOSURE)
+                closure_addr = untag_ref(closure)
+                target = self._r64(closure_addr)  # code pointer at slot 0
+                t.sp -= 8; self._w64(t.sp, npc)
+                t.sp -= 8; self._w64(t.sp, t.fp)
+                t.fp = t.sp
+                t.lr = npc
+                npc = target
+
             # ── RET ──────────────────────────────────────────────
             elif op == OP_RET:
                 t.sp = t.fp
@@ -495,6 +574,16 @@ class LM1Core:
                 rs = (payload >> 21) & 0x1F
                 npc = R[rs]
                 # Don't create new frame — reuse current
+
+            # ── TAILCALL.IC (tail inline-cache call) ─────────────
+            elif op == OP_TAILCALL_IC:
+                callsite = t.pc
+                shape_id = R[rs2] & MASK64
+                key = (callsite, shape_id)
+                if key in self.ic_table:
+                    npc = self.ic_table[key]
+                else:
+                    raise LM1Trap(TRAP_IC_MISS)
 
             # ── TRAP ─────────────────────────────────────────────
             elif op == OP_TRAP:
@@ -567,6 +656,13 @@ class LM1Core:
                     self._w64(addr, (old + R[rs2]) & MASK64)
                     R[rd] = old
                 # func==31 → FENCE.GC (no-op in single-threaded emulator)
+
+            # ── GC Movement Engines (ENQ.SCAN/COPY/FIXUP/COMPACT) ─
+            elif op in (OP_ENQ_SCAN, OP_ENQ_COPY, OP_ENQ_FIXUP, OP_ENQ_COMPACT):
+                region_base = R[rs1]
+                region_len = R[rs2]
+                self.gc_queue.append((op, region_base, region_len))
+                R[rd] = len(self.gc_queue)  # return queue depth
 
             else:
                 raise LM1Trap(TRAP_UNIMPLEMENTED)

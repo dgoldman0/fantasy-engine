@@ -68,6 +68,14 @@ class MP64Core:
         "tstride_r", "tstride_c", "ttile_h", "ttile_w",
         "perf_en", "perf_cycles", "perf_stalls",
         "perf_tileops", "perf_extmem",
+        "dma_ring_base", "dma_ring_size", "dma_head", "dma_tail",
+        "dma_status", "dma_ctrl",
+        "qos_weight", "qos_bwlimit",
+        "bist_cmd", "bist_status", "bist_fail_addr", "bist_fail_data",
+        "bist_selftest", "bist_selftest_detail",
+        "cl_priv", "cl_mpu_base", "cl_mpu_limit",
+        "icache_ctrl", "icache_hits", "icache_misses",
+        "cl_ivtbase", "barrier_arrive", "barrier_status",
         "port_in", "port_out",
         "on_output", "on_input",
         "mmio_read", "mmio_write", "mmio_start", "mmio_end",
@@ -127,6 +135,34 @@ class MP64Core:
         self.perf_stalls = 0
         self.perf_tileops = 0
         self.perf_extmem = 0
+        # DMA engine (CSRs 0x50–0x55)
+        self.dma_ring_base: int = 0
+        self.dma_ring_size: int = 0
+        self.dma_head: int = 0
+        self.dma_tail: int = 0
+        self.dma_status: int = 0   # 0=idle, 1=busy, 2=error
+        self.dma_ctrl: int = 0     # bit0=enable
+        # QoS (CSRs 0x58–0x59)
+        self.qos_weight: int = 1
+        self.qos_bwlimit: int = 0
+        # BIST (CSRs 0x60–0x65)
+        self.bist_cmd: int = 0
+        self.bist_status: int = 0  # 0=pass
+        self.bist_fail_addr: int = 0
+        self.bist_fail_data: int = 0
+        self.bist_selftest: int = 0
+        self.bist_selftest_detail: int = 0
+        # Cluster-level CSRs (0x6D–0x6F)
+        self.cl_priv: int = 0
+        self.cl_mpu_base: int = 0
+        self.cl_mpu_limit: int = 0
+        # I-cache & barrier (0x70–0x75)
+        self.icache_ctrl: int = 0
+        self.icache_hits: int = 0
+        self.icache_misses: int = 0
+        self.cl_ivtbase: int = 0
+        self.barrier_arrive: int = 0
+        self.barrier_status: int = 0
         # I/O
         self.port_in = [0] * 8
         self.port_out = [0] * 8
@@ -368,6 +404,34 @@ class MP64Core:
         if a == 0x6A: return self.perf_tileops
         if a == 0x6B: return self.perf_extmem
         if a == 0x6C: return self.perf_en
+        # DMA engine
+        if a == 0x50: return self.dma_ring_base
+        if a == 0x51: return self.dma_ring_size
+        if a == 0x52: return self.dma_head
+        if a == 0x53: return self.dma_tail
+        if a == 0x54: return self.dma_status
+        if a == 0x55: return self.dma_ctrl
+        # QoS
+        if a == 0x58: return self.qos_weight
+        if a == 0x59: return self.qos_bwlimit
+        # BIST
+        if a == 0x60: return self.bist_cmd
+        if a == 0x61: return self.bist_status
+        if a == 0x62: return self.bist_fail_addr
+        if a == 0x63: return self.bist_fail_data
+        if a == 0x64: return self.bist_selftest
+        if a == 0x65: return self.bist_selftest_detail
+        # Cluster-level
+        if a == 0x6D: return self.cl_priv
+        if a == 0x6E: return self.cl_mpu_base
+        if a == 0x6F: return self.cl_mpu_limit
+        # I-cache & barrier
+        if a == 0x70: return self.icache_ctrl
+        if a == 0x71: return self.icache_hits
+        if a == 0x72: return self.icache_misses
+        if a == 0x73: return self.cl_ivtbase
+        if a == 0x74: return self.barrier_arrive
+        if a == 0x75: return self.barrier_status
         return 0
 
     def _csr_write(self, addr: int, val: int):
@@ -409,6 +473,25 @@ class MP64Core:
                 self.perf_stalls = 0
                 self.perf_tileops = 0
                 self.perf_extmem = 0
+        # DMA engine
+        elif a == 0x50: self.dma_ring_base = v
+        elif a == 0x51: self.dma_ring_size = v
+        elif a == 0x52: self.dma_head = v
+        elif a == 0x53: self.dma_tail = v
+        elif a == 0x55: self.dma_ctrl = v
+        # QoS
+        elif a == 0x58: self.qos_weight = v
+        elif a == 0x59: self.qos_bwlimit = v
+        # BIST
+        elif a == 0x60: self.bist_cmd = v
+        # Cluster-level
+        elif a == 0x6D: self.cl_priv = v & 1
+        elif a == 0x6E: self.cl_mpu_base = v
+        elif a == 0x6F: self.cl_mpu_limit = v
+        # I-cache & barrier
+        elif a == 0x70: self.icache_ctrl = v
+        elif a == 0x73: self.cl_ivtbase = v
+        elif a == 0x74: self.barrier_arrive = v
 
     # -- trap delivery ----------------------------------------------------
     def _trap(self, vector: int, addr: int = 0):
