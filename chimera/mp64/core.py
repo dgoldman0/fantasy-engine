@@ -72,6 +72,7 @@ class MP64Core:
         "on_output", "on_input",
         "mmio_read", "mmio_write", "mmio_start", "mmio_end",
         "_accel_lib", "_accel_state", "_accel_run",
+        "csr_read_hook", "csr_write_hook",
     )
 
     def __init__(self, mem: bytearray, *, core_id: int = 0,
@@ -140,6 +141,9 @@ class MP64Core:
         self._accel_lib = None
         self._accel_state = None
         self._accel_run = None
+        # CSR hooks (set by cluster for IPI/barrier)
+        self.csr_read_hook = None   # callable(addr) -> int|None
+        self.csr_write_hook = None  # callable(addr, val) -> bool
 
     # -- properties -------------------------------------------------------
     @property
@@ -315,6 +319,10 @@ class MP64Core:
 
     # -- CSR access -------------------------------------------------------
     def _csr_read(self, addr: int) -> int:
+        if self.csr_read_hook is not None:
+            v = self.csr_read_hook(addr)
+            if v is not None:
+                return v
         a = addr & MASK8
         if a == 0x00: return self._pack_flags()
         if a == 0x01: return self.psel
@@ -363,6 +371,9 @@ class MP64Core:
         return 0
 
     def _csr_write(self, addr: int, val: int):
+        if self.csr_write_hook is not None:
+            if self.csr_write_hook(addr, val):
+                return
         a = addr & MASK8
         v = val & MASK64
         if a == 0x00: self._unpack_flags(v & MASK8)

@@ -37,6 +37,7 @@ OP_LD = 16;   OP_LD_CAR_CDR = 17; OP_ST = 18;          OP_ST_WB = 19
 OP_ST_CAR_CDR = 20
 OP_CALL_DIRECT = 26;  OP_CALL_CLOSURE = 27;  OP_RET = 28
 OP_TAILCALL_DIRECT = 30
+OP_SEND = 36; OP_RECV = 37; OP_CAS_TAGGED = 38; OP_FAA_FENCE = 39
 OP_ARITH_RAW = 48;   OP_BITWISE = 49;  OP_LDR = 50;   OP_STR = 51
 OP_BR = 52;   OP_BR_COND = 53;   OP_PUSH_POP = 54
 OP_LI = 55;   OP_LUI = 56;   OP_PUSH_MULTI = 57;  OP_POP_MULTI = 58
@@ -520,6 +521,52 @@ class LM1Core:
             # ── Prefetch (no-ops) ────────────────────────────────
             elif 32 <= op <= 35:
                 pass
+
+            # ── SEND (enqueue to HW queue) ───────────────────────
+            elif op == OP_SEND:
+                queue_id = imm16 & 3
+                val = R[rs1]
+                q = self.queues[queue_id]
+                if len(q) < q.maxlen:
+                    q.append(val)
+                # Silently drop if full
+
+            # ── RECV / TRY.RECV ──────────────────────────────────
+            elif op == OP_RECV:
+                queue_id = imm16 & 3
+                q = self.queues[queue_id]
+                if func == 0:  # RECV (blocking → here we just return 0 if empty)
+                    R[rd] = q.popleft() if q else 0
+                elif func == 1:  # TRY.RECV → rd=value, rd+1=success flag
+                    if q:
+                        R[rd] = q.popleft()
+                        if rd + 1 < 32:
+                            R[rd + 1] = T.T
+                    else:
+                        R[rd] = NIL
+                        if rd + 1 < 32:
+                            R[rd + 1] = NIL
+
+            # ── CAS.TAGGED ───────────────────────────────────────
+            elif op == OP_CAS_TAGGED:
+                addr = R[rs1]
+                old_val = R[rs2]
+                new_val = R[rd]
+                current = self._r64(addr)
+                if current == old_val:
+                    self._w64(addr, new_val)
+                    R[rd] = T.T
+                else:
+                    R[rd] = NIL
+
+            # ── FAA / FENCE.GC ───────────────────────────────────
+            elif op == OP_FAA_FENCE:
+                if func == 0:  # FAA
+                    addr = R[rs1]
+                    old = self._r64(addr)
+                    self._w64(addr, (old + R[rs2]) & MASK64)
+                    R[rd] = old
+                # func==31 → FENCE.GC (no-op in single-threaded emulator)
 
             else:
                 raise LM1Trap(TRAP_UNIMPLEMENTED)
