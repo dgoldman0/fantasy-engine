@@ -5,9 +5,11 @@ ensemble. The release brings MegaPad, Akashic and the LM1 Lisp chiplet
 together as one system that people can install and use. This plan covers the
 work from now until that release ships.
 
-`PLAN.md` is the only development document in this repository. Everything
-else here will document use and function. This file is deleted when the
-release ships, and its history stays in git.
+This plan lives in `dev/`, which holds all of this repository's development
+material: the plan, ideas still being worked out in `dev/ideas/`, and notes
+for later releases. Everything outside `dev/` will document use and
+function. The release is cut on a branch without `dev/`, so the release
+carries none of it, while main keeps it for the next release (decision 33).
 
 Status on 2026-10-27: the plan is locked in. Part 1 (organization) is under
 way: Part 1c, the LM1 split, is done, and Part 1d, the library
@@ -70,8 +72,8 @@ All were taken on 2026-10-27.
 6. One Practice is about the system itself, including its libraries.
 7. The libraries get an inventory. Only working, current libraries ship, and
    scrap stays out.
-8. Release documentation covers use and function only. This file is the one
-   exception, and it goes when the release ships.
+8. Release documentation covers use and function only. Development material
+   stays in `dev/`, which the release leaves out (decision 33).
 9. The release filesystem is ext4, supported to a reasonable degree rather
    than completely (Part 2).
 10. Three items lead the work: reasonable ext4 support (Part 2), proper
@@ -108,9 +110,10 @@ All were taken on 2026-10-27.
     before release (Part 11).
 21. Every component carries one version, 0.1.0, aligned when the release is
     prepared.
-22. The use-and-function rule covers this repository only, and its one place
-    for discussing how the release is built is this plan. The component
-    repositories keep their development material.
+22. The use-and-function rule covers this repository only, and here
+    development material, including how the release is built, lives in
+    `dev/` (decision 33). The component repositories keep their development
+    material.
 23. The alpha runs on Linux on 64-bit Intel and AMD PCs, with prebuilt parts
     compiled for the x86-64-v2 baseline. Windows users run it under WSL2,
     and macOS comes later.
@@ -188,6 +191,14 @@ All were taken on 2026-10-27.
     then, 9d's rules are written precisely enough for a checker to enforce
     them. The language stays small, Forth plus kinds, windows and placement,
     so that it doesn't split the library across a third language.
+33. All of this repository's development material lives in `dev/`: this
+    plan, ideas still being worked out, and notes for later releases. An
+    idea is worked out in `dev/ideas/` until it is decided, then moves into
+    the plan, and a dropped idea is deleted rather than kept. The release is
+    cut on a release branch that removes `dev/`, and the release tag goes on
+    that branch, so main keeps `dev/` for the next release. The repository
+    is public, so everything in `dev/` is public once pushed, and material
+    that must stay private goes elsewhere.
 
 ## 3. Open decisions
 
@@ -336,7 +347,9 @@ Goal: everything has one clear place, and we know what ships.
 
 ```
 fantasy-engine/
-  PLAN.md            this plan, deleted at release
+  dev/               development material, left out of the release (decision 33)
+    PLAN.md          this plan
+    ideas/           ideas still being worked out
   README.md          the front door: what the system is, how to install and run it
   docs/              user documentation only
   configurations/    one folder per sample configuration
@@ -871,7 +884,8 @@ Needs every other part.
 6. Tag every component with the release version, 0.1.0 (decision 21), and record the
    commits.
 7. Write release notes about function.
-8. Delete `PLAN.md`, and tag this repository.
+8. Cut a release branch that removes `dev/`, and tag this repository on that
+   branch (decision 33).
 
 This is standard practice for an open alpha. Before anything commercial,
 or before a chip is made, a lawyer reviews the licensing.
@@ -917,8 +931,9 @@ The workspace `AGENTS.md` governs this work. In short:
   Size resources from need.
 - The real device comes first. Say plainly when a change helps only the
   simulator.
-- Update this plan when a decision is taken, and delete dropped ideas rather
-  than keeping them.
+- Update this plan when a decision is taken. Work out ideas in `dev/ideas/`,
+  move each into the plan once it is decided, and delete dropped ideas
+  rather than keeping them.
 
 ## Appendix A. Library inventory, first pass
 
