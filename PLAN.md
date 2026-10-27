@@ -9,11 +9,11 @@ work from now until that release ships.
 else here will document use and function. This file is deleted when the
 release ships, and its history stays in git.
 
-Status on 2026-10-27: Part 1 (organization) is under way. Part 1c, the LM1
-split, is done, and Part 1d, the library inventory, has its first static
-pass. The Chimera prototype that used to live here is kept by the tag
-`archive/chimera-a499082-20261027`, and commit 54616ae removed it from the
-tree.
+Status on 2026-10-27: Daniel locked the plan in. Part 1 (organization) is
+under way: Part 1c, the LM1 split, is done, and Part 1d, the library
+inventory, has its first static pass. The Chimera prototype that used to
+live here is kept by the tag `archive/chimera-a499082-20261027`, and commit
+54616ae removed it from the tree.
 
 Section 1 says what the release is. Sections 2 and 3 list the decisions
 taken and the decisions still open. Section 4 records where each component
@@ -39,6 +39,8 @@ means a decision Daniel has yet to make.
   of them is the System Practice, a place to learn the system by building
   with its own libraries.
 - **Documentation about use and function only** (Decided).
+- **Open licences** (Decided). All code, RTL included, is licensed under
+  Apache-2.0, and documentation under CC BY 4.0.
 - **It runs on a PC** (Proposed). People run the native simulator and watch
   it through the rich-terminal viewer. The emulator stays available as a
   second backend.
@@ -73,58 +75,30 @@ All were taken on 2026-10-27.
 11. The LM1 chiplet's model is accelerated C++, written as a module that
     MegaPad's simulator imports. MegaPad's work therefore includes importing
     chiplet modules (Parts 3d and 8d).
+12. A lock file in this repository records the component commits that make
+    up the release (Part 1b).
+13. All code, RTL included, is licensed under Apache-2.0, and documentation
+    under CC BY 4.0. Apache-2.0 adds the explicit patent grant that CC0
+    withholds. MegaPad versions already published under CC0 stay CC0, and
+    LM1's MIT metadata line is replaced.
+14. Compliance is set up early and finished at release. Part 1g adds licence
+    files, per-file licence lines and notices; Part 11 adds a provenance
+    scan, third-party notices and a software bill of materials.
+15. "Reasonable" ext4 means what an alpha tester needs, done well (Part 2).
+16. The simulator work in Part 3: every full core, then the clusters and
+    microcores, with results equal to lock-step; speculative parallel rounds;
+    a general way to attach devices; and chiplet module import.
+17. LM1's Python emulator stays the reference model until the C++ chiplet
+    module is complete. Because it may be wrong too, the spec is the referee
+    between them (Part 8d).
 
 ## 3. Open decisions
 
 Each entry names what it blocks.
 
-**D1. How the components come together.** Daniel is weighing this. It
-blocks Part 1b. There are three ways:
-
-- **A lock file.** This repository holds a small file naming each
-  component's repository and commit. The build takes exactly those commits,
-  with `git archive` from the checkouts already in the workspace or from a
-  fresh clone when they're absent, so a dirty or switched checkout can't
-  leak into a build. Moving a component forward is a one-line commit here,
-  which also records which combination passed which checks. Nothing changes
-  in how `megapad/`, `akashic/` and `lm1/` are worked on. The costs are a
-  small fetch-and-verify tool, and GitHub shows the commits only as text.
-- **Git submodules.** This repository records each component as a submodule
-  at a commit, `git clone --recursive` fetches everything, and GitHub links
-  each component to its exact commit. In this workspace, though, each
-  component would get a second checkout inside fantasy-engine, unless the
-  working checkouts move inside it, which changes every path, worktree and
-  the image builder's sibling lookup. Submodules also check out detached
-  heads, so commits made there are easy to lose, and pushes must go
-  submodule first, pointer second.
-- **One repository.** `megapad/`, `akashic/` and `lm1/` move into one
-  repository with their history. Every commit is then one consistent state of
-  everything, with no locking and no paired branches: work such as
-  frames-follow-change, which needs matching branches in two repositories and
-  an integration step, becomes one branch. The costs are a large one-time
-  migration and a different public face. In-flight branches land first.
-  Tooling paths, worktrees and the Desktop journey's clean-tree guard need
-  adjusting, so that unrelated edits don't block a run. The old GitHub
-  repositories are archived with pointers. The repository then holds all
-  development material, so users see a clean face only through the packaged
-  download and the `docs/` tree.
-
-Proposed: the lock file, now. It keeps this repository the clean front door
-and changes nothing in daily work. One repository stays possible later if
-paired branches keep costing integration sessions.
-
-**D2. Licences.** No repository has a LICENSE file. MegaPad's README says
-"CC0 (for all components not superseded by existing licenses)". LM1's README
-says "TBD", while its emulator's `emu/pyproject.toml` says MIT. Akashic
-states no licence; its fonts are Apache-2.0 and Bitstream Vera, and its
-sample photo is public domain. MegaPad also tracks third-party material:
-`cdp1802.pdf`, and Unicode-derived data in `rich_terminal/text_data.py`. The
-release needs a licence for each component, notices for third-party
-material, and a decision about what may be redistributed at all. Blocks
-Part 11.
-
 **D3. Names.** What people call the system, and the name of the command that
-runs it. Blocks Part 4's command and the documents in Part 10.
+runs it. Candidate names are checked against existing trademarks. Blocks
+Part 4's command and the documents in Part 10.
 
 **D4. Version scheme.** Nothing is tagged yet. The BIOS banner says v1.0,
 KDOS says v1.1, the native extensions say 0.1.0, and MegaPad's
@@ -146,6 +120,15 @@ tile and per cluster, and whether the chiplet keeps its own HBM or uses
 MegaPad's memory. Blocks Part 8b.
 
 **D9. Which configurations ship.** Part 6 proposes six.
+
+**D10. Whether to purge `cdp1802.pdf` from MegaPad's history.** Part 1g
+removes the file from the tree. Purging it from history as well would
+rewrite commits that are already published. Blocks nothing, but is best
+settled before release.
+
+**D11. The microcore register count.** MegaPad's RTL microcore has 16
+registers where the design implies 32 (`docs/microcore-kernels-plan.md`).
+Either the RTL gets 32, or the design documents 16. Blocks Part 3e.
 
 ## 4. Where things stand
 
@@ -252,7 +235,7 @@ fantasy-engine/
   docs/              user documentation only
   configurations/    one folder per sample configuration
   <command>/         the package behind the command (named by D3)
-  <lock file>        component commits (per D1)
+  <lock file>        component repositories and commits (Part 1b)
   tests/             release checks
 ```
 
@@ -260,9 +243,15 @@ fantasy-engine/
 (Part 4), so nothing here describes plans. Nothing in this repository copies
 component source.
 
-**1b. Bring the components together** (needs D1). Record each component's
-commit and update it as parts land. Done when one command assembles every
-component at its recorded commit from a fresh checkout.
+**1b. The lock file** (Decided). A small file here names each component's
+repository and commit. The build takes exactly those commits, with
+`git archive` from the checkouts in the workspace or from a fresh clone when
+they're absent, so a dirty or switched checkout can't leak into a build.
+Moving a component forward is a one-line commit here, and the file's history
+records which combination passed which checks. Proposed: because Daniel
+pushes by hand, the tool warns when a recorded commit isn't on its
+component's remote yet. Done when one command assembles every component at
+its recorded commit from a fresh checkout.
 
 **1c. Split LM1 into the chiplet.** Done on 2026-10-27, LM1 commit 0afe4af.
 The tag `archive/lm1-os-desktop-e19aebd-20261027` keeps the removed work: the
@@ -326,6 +315,28 @@ temporary import aliases go. `bios.rom` is either built or tracked, not both;
 it is tracked although `.gitignore` lists it. One Python version is stated
 and used.
 
+**1g. Licences and notices** (Decided).
+
+1. Each repository gets the Apache-2.0 and CC BY 4.0 texts, following the
+   REUSE specification: an SPDX licence and copyright line in every file
+   that can carry one, and a `REUSE.toml` entry for files that can't, such
+   as fonts, images and binary fixtures. `reuse lint` runs with each
+   repository's tests.
+2. `cdp1802.pdf`, RCA's 1802 manual, leaves MegaPad's tree, and the README
+   links to a public copy instead. D10 covers its history.
+3. The generated Unicode tables carry the Unicode licence notice, and their
+   generators write it: MegaPad's `rich_terminal/text_data.py` and Akashic's
+   `akashic/text/unicode-tables.f`.
+4. Roboto's Apache-2.0 text and DejaVu's Bitstream Vera licence sit beside
+   the fonts.
+5. Third-party material that is already recorded stays as it is: the CC0
+   AT Protocol test vectors, with their source commit, and the
+   public-domain photo.
+6. MegaPad's README states that earlier versions remain CC0, and LM1's MIT
+   metadata line is replaced.
+
+Done when `reuse lint` passes in every repository.
+
 ### Part 2. Storage: ext4
 
 One of the three leading items (Decided): reasonable ext4 support, not
@@ -343,11 +354,25 @@ MegaPad's storage controller takes 32-bit sector numbers, and
 part 4 added a read-only settings volume on a second storage controller; that
 work is on its branch and not yet merged.
 
-Proposed scope for "reasonable": what the release's volumes need. That
-means directories with many files, files of any size, reading the system
-volume, reading and writing the user volume, and images that standard host
-tools (e2fsprogs) can build and check. Journaling, extended attributes,
-encryption, quotas and online resizing can wait.
+"Reasonable" means what an alpha tester needs, done well (Decided):
+
+- **It never damages data.** Everything it does is correct and survives a
+  crash. Akashic's writer already journals each change, and `e2fsck` on the
+  host checks the result.
+- **It refuses cleanly.** Anything it can't do fails with an error, using
+  ext4's own feature flags.
+- **It covers everyday use.** That means saving new files and saving over
+  old ones, growing and shrinking files of realistic size, renaming,
+  deleting, and making and removing folders of a few hundred entries.
+
+Images are standard ext4, which host tools (e2fsprogs) can build and check.
+Akashic's writer already creates, deletes and renames files and folders,
+makes links, truncates, and grows files, each only in bounded cases. For the
+alpha it closes two gaps: general allocation, meaning growing and shrinking
+beyond those cases, and renaming over an existing file, which is the usual
+safe way to save. It keeps 1 KiB blocks, which are legal ext4 and fine at
+these sizes. Symlinks, extended attributes, permissions, quotas, encryption
+and online resizing wait.
 
 Proposed: every configuration boots with three volumes.
 
@@ -366,20 +391,21 @@ stays, or the BIOS learns to read ext4.
 
 Steps:
 
-1. Settle the scope and the boot path.
-2. Extend Akashic's ext4 binding to the scope, including writes beyond the
-   preview's limits.
+1. Settle the boot path.
+2. Close the writer's two alpha gaps: general allocation, and renaming over
+   an existing file.
 3. Teach KDOS to load modules from ext4 volumes.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
 
 Done when the canonical Desktop boots from an ext4 system volume that holds
-its modules as individual files, a user volume takes writes and passes the
-host's `e2fsck`, and the physical journey passes.
+its modules as individual files, a user volume takes everyday writes and
+passes the host's `e2fsck`, also after a run killed mid-write, and the
+physical journey passes.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
-One of the three leading items (Decided).
+One of the three leading items. Steps 3a to 3d are decided.
 
 Goal: the native simulator runs MegaPad as the multicore machine it is, and
 loads chiplets such as LM1 as modules.
@@ -416,8 +442,8 @@ registers where the design implies 32, and boot sets up no microcore stacks.
   endpoints, shared memory windows, interrupts, reset, and the module's place
   in the simulator's rounds. Proposed: the emulator loads the same modules,
   so both backends run the same chiplet model.
-- **3e. Microcore gaps.** The microcore register count and boot stacks are
-  settled before microcore simulation is built.
+- **3e. Microcore gaps.** The microcore register count (D11) and boot
+  stacks are settled before microcore simulation is built.
 
 Done when:
 
@@ -556,9 +582,10 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   interface, and MegaPad implements the host side.
 - **8d. The chiplet module** (Decided). LM1's model is written in
   accelerated C++ as a chiplet module that MegaPad's simulator imports
-  through Part 3d's interface, and it is built from `lm1/`. Proposed: the
-  Python emulator stays as the reference model, and differential tests hold
-  the two together.
+  through Part 3d's interface, and it is built from `lm1/`. The Python
+  emulator stays the reference model until the module is complete. It may be
+  wrong too, so the spec is the referee: when the two disagree, check the
+  spec, fix whichever is wrong, and add a test.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC.
@@ -621,23 +648,41 @@ document talks about plans, phases, evidence or history.
 
 ### Part 11. Qualification and release
 
-Needs every other part, plus D2, D4 and D6.
+Needs every other part, plus D4 and D6.
 
 1. Package what people download: prebuilt images, the command, and native
    extensions built for a portable CPU baseline instead of `-march=native`
    (D6).
-2. Add licences and notices (D2).
-3. Run the final checks: every configuration's journey, the canonical
+2. Generate the notices from the lock file's commits: a third-party notices
+   file and an SPDX software bill of materials. pybind11's BSD licence ships
+   with the native extensions, which compile it in. Any bundled Python
+   package brings its licence; pygame, under LGPL-2.1, stays a separate
+   package users can replace. e2fsprogs, under the GPL, is not bundled; the
+   command uses the copy on the user's machine.
+3. Run a ScanCode scan of every repository at its recorded commit. It must
+   find no unattributed copied code and no stray licence texts, and its
+   result is recorded.
+4. Settle what lies beyond licences. Check the release's names against
+   existing trademarks (D3), and confirm the export position of the
+   encryption code (open source, standard algorithms). The docs say that the
+   Agent's and Streams' outside services run under their own terms, with the
+   user's own keys.
+5. Run the final checks: every configuration's journey, the canonical
    Desktop journey, LM1's emulator and RTL tests, and the link conformance
    tests. Each heavy run goes alone, under the workspace rules.
-4. Tag every component with the release version (D4), and record the
+6. Tag every component with the release version (D4), and record the
    commits.
-5. Write release notes about function.
-6. Delete `PLAN.md`, and tag this repository.
+7. Write release notes about function.
+8. Delete `PLAN.md`, and tag this repository.
+
+This is standard practice for an open alpha. Before anything commercial,
+or before a chip is made, a lawyer reviews the licensing.
 
 ## 6. Order
 
-- Part 1 comes first. Part 1c is done, 1d continues, and 1b waits on D1.
+- Part 1 comes first. Part 1c is done, and 1b, 1d and 1g proceed. Part 1g
+  touches every repository; in `megapad/` and `akashic/` it goes on branches
+  of its own.
 - Three parts lead (Decided): Part 2 (ext4), Part 3 (the simulator) and
   Part 8 (the LM1 chiplet). They proceed side by side, mostly in different
   repositories: Part 2 in Akashic and MegaPad, Part 3 in MegaPad, and Part 8
