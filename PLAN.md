@@ -94,41 +94,142 @@ All were taken on 2026-10-27.
 
 ## 3. Open decisions
 
-Each entry names what it blocks.
+Each entry gives what Daniel needs to decide it without other reading: the
+background, the options with their consequences, a recommendation, and what
+it blocks.
 
-**D3. Names.** What people call the system, and the name of the command that
-runs it. Candidate names are checked against existing trademarks. Blocks
-Part 4's command and the documents in Part 10.
+**D3. Names.** Three things need names: the system people download and run,
+the command that runs it (Part 4), and the combined MegaPad and LM1 chip.
+LM1's README already calls the combined chip "Leviathan". This repository is
+called fantasy-engine and the workspace fantasy-computing, but neither has to
+be the public name. The names appear in every user document, so they are
+best settled before Part 4's command and Part 10's documents. Each candidate
+is first checked against existing trademarks in software and hardware. Two
+obvious options are naming the whole machine Leviathan, or calling the
+system Fantasy Engine after this repository. No recommendation: naming is
+Daniel's choice. Blocks Part 4's command and Part 10.
 
-**D4. Version scheme.** Nothing is tagged yet. The BIOS banner says v1.0,
-KDOS says v1.1, the native extensions say 0.1.0, and MegaPad's
-`ROADMAP-v1.0.md` plans a v1.0 of its own. Proposed: one version for the
-whole release, tagged in every component. Blocks Part 11.
+**D4. Version scheme.** A version number tells users which release they
+have, and lets bug reports name it. Nothing is tagged anywhere yet, and the
+numbers in use were set independently: the BIOS banner says v1.0, KDOS says
+v1.1, the native extensions say 0.1.0, and MegaPad's `ROADMAP-v1.0.md` plans
+a v1.0 tag of its own. The options:
+
+- one version for the whole release, tagged in every component and shown in
+  the banners;
+- a version per component, with a release number that lists them.
+
+Recommended: one version, starting at 0.1.0 for the first alpha, since a
+version below 1.0 tells users that things may still change. The BIOS and
+KDOS banners show it, and `ROADMAP-v1.0.md` stops setting versions. Blocks
+Part 11.
 
 **D5. Whether the use-and-function rule also covers the component
-repositories.** Their docs mix reference material with plans, handoffs and
-evidence. Blocks the scope of Part 10.
+repositories.** Decision 8 limits this repository's documentation to use
+and function. The component repositories mix two kinds of document.
+Reference material includes MegaPad's ISA and KDOS references, Akashic's
+per-library docs and LM1's spec. Development records include handoffs,
+plans, evidence notes, and the status narrative inside many reference docs.
+Part 10 writes the user documents fresh here, using component docs only as
+sources of facts. The options:
 
-**D6. Platforms.** The system runs only on Linux today. Sessions use
-AF_UNIX sockets, networking uses a Linux TAP device, tests use POSIX process
-groups, and the emulator's JIT exists only for Linux on x86-64. The native
-extensions build with `-march=native`, which ties each binary to the kind of
-CPU that built it. Blocks Part 11.
+- apply the rule here only, and keep the component repositories as working
+  records;
+- also clean the component repositories, so their docs describe the current
+  design, with plans, evidence and history moved out.
 
-**D8. LM1's product scale.** How many tiles and clusters, how much SRAM per
-tile and per cluster, and whether the chiplet keeps its own HBM or uses
-MegaPad's memory. Blocks Part 8b.
+The second makes the components readable to newcomers, but it means editing
+hundreds of documents while the leading parts are under way. Recommended:
+the first for now, with one rule from here on: reference docs describe the
+current design, and plans, evidence and history stay in their own files.
+Revisit after the release. Blocks the scope of Part 10.
 
-**D9. Which configurations ship.** Part 6 proposes six.
+**D6. Platforms.** This decides where the alpha runs. Today that is Linux
+only. Sessions use AF_UNIX sockets, real networking needs a Linux TAP device,
+tests use POSIX process groups, and the emulator's JIT exists only for Linux
+on x86-64. The native extensions build with `-march=native`, so a binary
+built on one machine can fail on an older CPU. The options:
 
-**D10. Whether to purge `cdp1802.pdf` from MegaPad's history.** Part 1g
-removes the file from the tree. Purging it from history as well would
-rewrite commits that are already published. Blocks nothing, but is best
-settled before release.
+- Linux on x86-64 only, with prebuilt extensions for a portable CPU
+  baseline;
+- macOS and Windows as well, which means replacing the Linux-specific parts
+  and porting or dropping the JIT.
 
-**D11. The microcore register count.** MegaPad's RTL microcore has 16
-registers where the design implies 32 (`docs/microcore-kernels-plan.md`).
-Either the RTL gets 32, or the design documents 16. Blocks Part 3e.
+Recommended: the first. The baseline is x86-64-v2, which nearly every x86-64
+PC from the last decade supports, and building from source still uses
+`-march=native`. Windows users can run the Linux build under WSL2, and
+macOS can follow later. Blocks Part 11.
+
+**D8. LM1's product scale.** This sets what LM1 becomes as a chiplet. Today's
+spec describes a standalone accelerator: 256 tiles in 32 clusters, 256 KiB of
+SRAM per tile and 2 MiB per cluster, and 32 GiB of HBM3E. Daniel considers
+the per-tile and per-cluster SRAM toy-scale, and the FPGA build fits only one
+8-tile cluster. Three questions follow:
+
+- how much on-chip memory each tile and cluster gets, since more per tile
+  means fewer tiles in the same area;
+- how many tiles and clusters belong in a chiplet beside a modest MegaPad;
+- where the chiplet's main memory lives.
+
+For main memory there are two options. Its own memory, such as HBM or
+LPDDR, is fast and keeps Lisp heap and GC traffic off MegaPad's bus, but it
+makes the package more complex. MegaPad's memory, reached over the link, is
+cheaper and simpler, but Lisp then shares bandwidth with Desk. Recommended: a
+short sizing study as the first step of Part 8b, covering target Lisp
+workloads, an area budget relative to MegaPad, and the bandwidth of each
+memory option. The study comes back with numbers before anything is chosen.
+Blocks Part 8b.
+
+**D9. Which configurations ship.** Part 6 proposes six: one for each group
+of applets that exists today, plus System for the libraries and Lisp for the
+chiplet. Each costs a Practice, a scripted journey and its documentation.
+Each also needs a check of the real outside services it uses, such as the
+Agent's provider key and Streams' live feeds. Recommended: all six, since
+together they cover every applet and both new pieces. The names are working
+names. Blocks Part 6.
+
+**D10. Whether to purge `cdp1802.pdf` from MegaPad's history.** The file is
+a 225 KB copy of RCA's 1802 manual, added on 2026-02-07. It is copyrighted,
+and nothing grants permission to share it. Part 1g removes it from the tree,
+so neither the release nor future checkouts include it. Git keeps it in
+history, though, so every clone of the public repository still carries a
+copy. The options:
+
+- leave history alone;
+- purge the file from history.
+
+Purging rewrites 1,415 of MegaPad's 1,422 commits, so every commit ID since
+February changes. That breaks the IDs cited in evidence notes, docs and
+`AGENTS.md`, and forces a rebase of all 33 branches that contain the file,
+work in progress included. It needs a force-push, and GitHub may keep the
+old commits reachable until its support team purges them. The repository
+has no forks, so the damage stays local. Recommended: leave history alone,
+and purge only if the rights holder asks. Removing the file from the tree
+is what keeps the release clean. Blocks nothing.
+
+**D11. The microcore register count.** MegaPad's full cores have 32
+registers. R0 to R15 fit in an instruction's register byte, and R16 to R31
+need a one-byte REX prefix. The design says microcores run the full-core ISA
+minus the 1802-heritage features, which implies 32, but the RTL microcore
+has 16. Microcores run only kernels: restricted Forth words with no
+dictionary, heap, I/O or exceptions, which keep their data stack in
+registers. The options:
+
+- 32 registers, so fewer kernels spill their stack to memory;
+- 16 registers, which takes less area on each of the twelve microcores and
+  keeps kernel code smaller, with no REX prefixes. That matters because
+  fetch traffic is a known microcore cost (`docs/microcore-kernels-plan.md`).
+  The registers that full cores reserve, R16, R17 and R19, are ones
+  microcores never need, since they don't run the BIOS's Forth.
+
+Either way, one defect needs fixing. From a reading of the RTL, not yet a
+test, the microcore accepts the REX prefix but ignores its high bit. An
+instruction naming R17 would then silently use R1. The emulator, meanwhile,
+gives microcores all 32 registers. Recommended: 16. Any instruction naming
+R16 to R31 then raises an illegal-instruction trap on a microcore, in the
+RTL, the emulator and the simulator alike, and the architecture and ISA
+references say so. Revisit only if measured kernels spill heavily. Blocks
+Part 3e.
 
 ## 4. Where things stand
 
