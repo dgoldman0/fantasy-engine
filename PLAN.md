@@ -31,19 +31,21 @@ made.
   simulator and emulator, BIOS, KDOS and system modules. Akashic supplies the
   libraries, Desk, the applets and Practices. LM1 is a Lisp chiplet that
   works beside MegaPad as a partner device: MegaPad handles control, I/O and
-  number crunching, and LM1 runs Lisp. LM1's README gives "Leviathan" as a
-  working name for the combined chip.
-- **The LM1 chiplet is in it** (Decided). There is no release until it is.
-- **Sample configurations** (Decided). A handful of ready-made boot setups
-  each open one Practice, and together they cover what the system does. One
-  of them is the System Practice, a place to learn the system by building
-  with its own libraries.
+  number crunching, and LM1 runs Lisp. The combined chip is Leviathan, and
+  the system people run is Fantasy Engine.
+- **The LM1 chiplet is in it** (Decided). There is no release until it is,
+  and it is part of Leviathan in every configuration, not an add-on.
+- **Sample configurations** (Decided). A handful of ready-made boot setups,
+  each a Practice built around a task or subject, together cover what the
+  system does. One of them is the System Practice, a place to learn the
+  system by building with its own libraries.
 - **Documentation about use and function only** (Decided).
 - **Open licences** (Decided). All code, RTL included, is licensed under
   Apache-2.0, and documentation under CC BY 4.0.
-- **It runs on a PC** (Proposed). People run the native simulator and watch
-  it through the rich-terminal viewer. The emulator stays available as a
-  second backend.
+- **It runs on a Linux PC** (platform Decided, the rest Proposed). People run
+  the native simulator on 64-bit Intel or AMD Linux, or under WSL2 on
+  Windows, and watch it through the rich-terminal viewer. The emulator stays
+  available as a second backend.
 - **Hardware designs ship with it** (Proposed). MegaPad's and LM1's RTL are
   part of the release, at the same recorded commits as the software.
 
@@ -98,6 +100,23 @@ All were taken on 2026-10-27.
 19. Microcores get all 32 registers, as the design implies and the emulator
     already models. The RTL microcore, which has 16 and appears to ignore the
     REX prefix's extension bit, is widened to match (Part 3e).
+20. The system and its command are called Fantasy Engine, and the combined
+    MegaPad and LM1 chip is Leviathan. Both names get a trademark search
+    before release (Part 11).
+21. Every component carries one version, 0.1.0, aligned when the release is
+    prepared.
+22. The use-and-function rule covers this repository only, and its one place
+    for discussing how the release is built is this plan. The component
+    repositories keep their development material.
+23. The alpha runs on Linux on 64-bit Intel and AMD PCs, with prebuilt parts
+    compiled for the x86-64-v2 baseline. Windows users run it under WSL2,
+    and macOS comes later.
+24. LM1 is part of Leviathan in every configuration, not an add-on, so no
+    configuration exists only for Lisp.
+25. Each sample configuration is a Practice built around a task or subject.
+    It binds the material the work needs, sets what may act there and opens
+    what the work calls for; it is not a preset of which applets are open.
+    Sound Lab and Observatory are not configurations as they stand.
 
 ## 3. Open decisions
 
@@ -105,94 +124,35 @@ Each entry gives what is needed to decide it without other reading: the
 background, the options with their consequences, a recommendation, and what
 it blocks.
 
-**D3. Names.** Three things need names: the system people download and run,
-the command that runs it (Part 4), and the combined MegaPad and LM1 chip.
-LM1's README already calls the combined chip "Leviathan". This repository is
-called fantasy-engine and the workspace fantasy-computing, but neither has to
-be the public name. The names appear in every user document, so they are
-best settled before Part 4's command and Part 10's documents. Each candidate
-is first checked against existing trademarks in software and hardware. Two
-obvious options are naming the whole machine Leviathan, or calling the
-system Fantasy Engine after this repository. No recommendation is made for
-names. Blocks Part 4's command and Part 10.
-
-**D4. Version scheme.** A version number tells users which release they
-have, and lets bug reports name it. Nothing is tagged anywhere yet, and the
-numbers in use were set independently: the BIOS banner says v1.0, KDOS says
-v1.1, the native extensions say 0.1.0, and MegaPad's `ROADMAP-v1.0.md` plans
-a v1.0 tag of its own. The options:
-
-- one version for the whole release, tagged in every component and shown in
-  the banners;
-- a version per component, with a release number that lists them.
-
-Recommended: one version, starting at 0.1.0 for the first alpha, since a
-version below 1.0 tells users that things may still change. The BIOS and
-KDOS banners show it, and `ROADMAP-v1.0.md` stops setting versions. Blocks
-Part 11.
-
-**D5. Whether the use-and-function rule also covers the component
-repositories.** Decision 8 limits this repository's documentation to use
-and function. The component repositories mix two kinds of document.
-Reference material includes MegaPad's ISA and KDOS references, Akashic's
-per-library docs and LM1's spec. Development records include handoffs,
-plans, evidence notes, and the status narrative inside many reference docs.
-Part 10 writes the user documents fresh here, using component docs only as
-sources of facts. The options:
-
-- apply the rule here only, and keep the component repositories as working
-  records;
-- also clean the component repositories, so their docs describe the current
-  design, with plans, evidence and history moved out.
-
-The second makes the components readable to newcomers, but it means editing
-hundreds of documents while the leading parts are under way. Recommended:
-the first for now, with one rule from here on: reference docs describe the
-current design, and plans, evidence and history stay in their own files.
-Revisit after the release. Blocks the scope of Part 10.
-
-**D6. Platforms.** This decides where the alpha runs. Today that is Linux
-only. Sessions use AF_UNIX sockets, real networking needs a Linux TAP device,
-tests use POSIX process groups, and the emulator's JIT exists only for Linux
-on x86-64. The native extensions build with `-march=native`, so a binary
-built on one machine can fail on an older CPU. The options:
-
-- Linux on x86-64 only, with prebuilt extensions for a portable CPU
-  baseline;
-- macOS and Windows as well, which means replacing the Linux-specific parts
-  and porting or dropping the JIT.
-
-Recommended: the first. The baseline is x86-64-v2, which nearly every x86-64
-PC from the last decade supports, and building from source still uses
-`-march=native`. Windows users can run the Linux build under WSL2, and
-macOS can follow later. Blocks Part 11.
-
 **D8. LM1's product scale.** This sets what LM1 becomes as a chiplet. Today's
 spec describes a standalone accelerator: 256 tiles in 32 clusters, 256 KiB of
 SRAM per tile and 2 MiB per cluster, and 32 GiB of HBM3E. The per-tile and
 per-cluster SRAM are toy-scale, and the FPGA build fits only one 8-tile
-cluster. Three questions follow:
+cluster. The principle is decided: LM1 matches what the ecosystem demands of
+the rest of Leviathan, neither above nor below production scale. The numbers
+are chosen when LM1 work starts. Three questions remain:
 
 - how much on-chip memory each tile and cluster gets, since more per tile
   means fewer tiles in the same area;
-- how many tiles and clusters belong in a chiplet beside a modest MegaPad;
+- how many tiles and clusters that demand calls for;
 - where the chiplet's main memory lives.
 
 For main memory there are two options. Its own memory, such as HBM or
 LPDDR, is fast and keeps Lisp heap and GC traffic off MegaPad's bus, but it
 makes the package more complex. MegaPad's memory, reached over the link, is
 cheaper and simpler, but Lisp then shares bandwidth with Desk. Recommended: a
-short sizing study as the first step of Part 8b, covering target Lisp
-workloads, an area budget relative to MegaPad, and the bandwidth of each
-memory option. The study comes back with numbers before anything is chosen.
+short sizing study as the first step of Part 8b, covering the Lisp work
+Leviathan's Practices give LM1, an area budget relative to MegaPad, and the
+bandwidth of each memory option. The study comes back with numbers before anything is chosen.
 Blocks Part 8b.
 
-**D9. Which configurations ship.** Part 6 proposes six: one for each group
-of applets that exists today, plus System for the libraries and Lisp for the
-chiplet. Each costs a Practice, a scripted journey and its documentation.
-Each also needs a check of the real outside services it uses, such as the
-Agent's provider key and Streams' live feeds. Recommended: all six, since
-together they cover every applet and both new pieces. The names are working
+**D9. Which configurations ship.** Each sample configuration is a Practice
+built around a task or subject (decision 25). Part 6 proposes five, four of
+them for the alpha. Each costs a Practice design, covering what it binds,
+what may act there and what opens, plus a scripted journey and its
+documentation, and each needs its real outside services checked.
+Recommended: Everyday, Workshop, Study and Publishing for the alpha, with
+Investigation after it, since it needs new parts. The names are working
 names. Blocks Part 6.
 
 ## 4. Where things stand
@@ -299,7 +259,7 @@ fantasy-engine/
   README.md          the front door: what the system is, how to install and run it
   docs/              user documentation only
   configurations/    one folder per sample configuration
-  <command>/         the package behind the command (named by D3)
+  fantasy_engine/    the package behind the fantasy-engine command
   <lock file>        component repositories and commits (Part 1b)
   tests/             release checks
 ```
@@ -536,10 +496,11 @@ profiles are test setups.
   harness use it. This repository calls that tool at the recorded commit and
   doesn't copy it.
 - **4b.** A configuration format: one TOML file per configuration, matching
-  Desk's own TOML settings. It names the Practice, the machine (memory,
-  cores, and whether the LM1 chiplet is present), the volumes and their
+  Desk's own TOML settings. It names the Practice, the machine's memory
+  and cores (every configuration runs on the whole of Leviathan, LM1
+  included), the volumes and their
   sizes, and any extra resources.
-- **4c.** The command (named by D3), with `list`, `build NAME`, `run NAME`
+- **4c.** The `fantasy-engine` command, with `list`, `build NAME`, `run NAME`
   and `new NAME FROM`, which starts a configuration of your own from an
   existing one. `run` builds when needed, starts the simulator and opens the
   viewer.
@@ -574,20 +535,47 @@ is queued by autoexec text.
 
 ### Part 6. The sample configurations
 
+Each configuration is a Practice built around a task or subject
+(decision 25). It binds the material the work needs, sets what the Agent,
+scheduled actions and sandboxed tools may do there, and opens what the work
+calls for. LM1 is part of the machine in all of them, and each Practice
+uses Lisp where its work calls for it.
+
 Proposed set (D9). The names are working names.
 
-| Configuration | What its Practice is for | Applets |
-|---|---|---|
-| Everyday | writing, planning and files | Pad, Explorer, Daybook, Grid, Agent |
-| Sound | making and studying sound | Sound Lab |
-| Reading | feeds, AT Protocol and documents | Streams, Library, Pad |
-| Observatory | watching data series and models | Observatory, Worlds |
-| System | learning the system by building with it | Pad, Explorer, a Forth console, the library sources (Part 7) |
-| Lisp | the LM1 chiplet | a Lisp console, Pad (Part 9) |
+- **Everyday.** Daily computing, the internet included: writing, documents
+  and PDFs, files, plans and reminders, tables, Bluesky and news feeds, and
+  an Agent with a real AI provider. It binds the user's documents, calendar
+  and feeds. The Agent may read, draft and set reminders; anything it would
+  post or send waits for the user's approval.
+- **Workshop** (the System Practice, Part 7). Learning the machine by
+  building with it, in Forth on MegaPad and Lisp on LM1 side by side. It
+  holds the shipped library sources read-only, a writable workspace, a
+  console for each language, the reference docs, and the sandbox for trying
+  modules safely. The Agent explains code and helps write modules.
+- **Study.** A Practice around one subject: a corpus of documents and PDFs,
+  feeds that follow the subject, notes and tables, and a growing map of the
+  subject's concepts kept in Lisp on LM1, which is new work. The Agent
+  summarizes with citations to the bound sources. It ships with one sample
+  subject, whose material must be freely licensed.
+- **Publishing.** Writing for the web: drafts in Pad, a small website served
+  by the machine's own web server, a feed of the posts, and posting to
+  Bluesky. The feed writer is new work, since Akashic's feed code only reads
+  today. The Agent drafts, and nothing goes out without approval.
+- **Investigation** (after the alpha). The Detective Box idea as a
+  Practice: evidence kept tamper-evident with hashes from MegaPad's SHA-3
+  hardware, a timeline, a graph of people, things and events reasoned over
+  in Lisp on LM1, and findings that link back to their evidence. The Agent
+  may propose links but never changes evidence. It needs new parts, an
+  evidence store and the graph, so it is the largest.
+
+Sound Lab and Observatory are not configurations as they stand; whether
+they ship as applets follows from the inventory (Part 1d).
 
 For each configuration:
 
-1. Write its Practice and its configuration file.
+1. Design its Practice, covering what it binds, what may act there and
+   what opens, and write its configuration file.
 2. Check the real providers and connectors it uses, which the test profiles
    never exercise. The Agent needs a provider key, and Streams fetches live
    feeds.
@@ -600,7 +588,7 @@ Done when every configuration runs from the command and passes its journey.
 
 ### Part 7. The System Practice
 
-Needs Parts 1d, 2 and 5.
+Needs Parts 1d, 2 and 5, and Part 9 for its Lisp half.
 
 Contents:
 
@@ -609,14 +597,16 @@ Contents:
 - Pad and Explorer;
 - a Forth console applet, which doesn't exist yet. It loads modules from the
   user area and shows what they do;
+- the Lisp console on LM1 (Part 9), so both of Leviathan's engines can be
+  learned side by side;
 - the library reference, readable from inside the system.
 
 Its authority covers reading the library sources, writing only in the user
 area, and loading modules from there.
 
 Done when a learner can open a shipped library's source, write a module that
-uses it, load it and watch it run, and nothing inside the system can change
-the installed libraries.
+uses it, load it and watch it run, do the same in Lisp on LM1, and nothing
+inside the system can change the installed libraries.
 
 ### Part 8. The LM1 chiplet
 
@@ -672,17 +662,19 @@ Needs Part 5 and Parts 3d, 8c and 8d.
 
 - **9a.** MegaPad gets a system module for the chiplet, following
   `networking.f` and `rich-terminal.f`. MegaPad owns it, and system
-  composition loads it at boot when the chiplet is present.
+  composition loads it at boot, since every configuration runs on
+  Leviathan.
 - **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
-- **9c.** The Lisp Practice. A Lisp console applet talks to the chiplet's
-  REPL, which `spec/06` places in the chiplet's own runtime along with the
-  compiler. Pad holds programs, and examples come with it.
+- **9c.** A Lisp console applet talks to the chiplet's REPL, which
+  `spec/06` places in the chiplet's own runtime along with the compiler. Any
+  Practice can include it; the Workshop does, and Study and Investigation use
+  Lisp for their concept map and graph. Pad holds programs, and examples
+  come with it.
 
-Done when the Lisp configuration's journey passes: evaluate expressions, run
-a program written in Pad, and see the results, all through Desk's normal
-path.
+Done when, in the Workshop, a journey evaluates Lisp expressions and runs a
+program written in Pad on LM1, all through Desk's normal path.
 
 ### Part 10. Documentation
 
@@ -708,18 +700,18 @@ while writing:
 - the Desktop's memory (320 or 384 MiB);
 - the missing `rtl/README.md`.
 
-D5 decides whether the component repositories' docs get the same treatment.
+The component repositories keep their own development docs (decision 22).
 
 Done when every shipped feature is documented by use and function, and no
 document talks about plans, phases, evidence or history.
 
 ### Part 11. Qualification and release
 
-Needs every other part, plus D4 and D6.
+Needs every other part.
 
 1. Package what people download: prebuilt images, the command, and native
-   extensions built for a portable CPU baseline instead of `-march=native`
-   (D6).
+   extensions built for the x86-64-v2 baseline instead of `-march=native`
+   (decision 23).
 2. Generate the notices from the lock file's commits: a third-party notices
    file and an SPDX software bill of materials. pybind11's BSD licence ships
    with the native extensions, which compile it in. Any bundled Python
@@ -730,14 +722,14 @@ Needs every other part, plus D4 and D6.
    find no unattributed copied code and no stray licence texts, and its
    result is recorded.
 4. Settle what lies beyond licences. Check the release's names against
-   existing trademarks (D3), and confirm the export position of the
+   existing trademarks (decision 20), and confirm the export position of the
    encryption code (open source, standard algorithms). The docs say that the
    Agent's and Streams' outside services run under their own terms, with the
    user's own keys.
 5. Run the final checks: every configuration's journey, the canonical
    Desktop journey, LM1's emulator and RTL tests, and the link conformance
    tests. Each heavy run goes alone, under the workspace rules.
-6. Tag every component with the release version (D4), and record the
+6. Tag every component with the release version, 0.1.0 (decision 21), and record the
    commits.
 7. Write release notes about function.
 8. Delete `PLAN.md`, and tag this repository.
