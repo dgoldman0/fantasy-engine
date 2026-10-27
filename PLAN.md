@@ -30,9 +30,12 @@ made.
 - **One system** (Decided). MegaPad is the Forth machine: its native
   simulator and emulator, BIOS, KDOS and system modules. Akashic supplies the
   libraries, Desk, the applets and Practices. LM1 is a Lisp chiplet that
-  works beside MegaPad as a partner device: MegaPad handles control, I/O and
-  number crunching, and LM1 runs Lisp. The combined chip is Leviathan, and
-  the system people run is Fantasy Engine.
+  works beside MegaPad as a partner device, and the two share memory.
+  MegaPad handles control, I/O and number crunching. LM1 runs the sandbox's
+  jobs and holds the data Desk wants collected, with type checks, allocation
+  and garbage collection in hardware, and its own software is written in
+  Lisp. The combined chip is Leviathan, and the system people run is Fantasy
+  Engine.
 - **The LM1 chiplet is in it** (Decided). There is no release until it is,
   and it is part of Leviathan in every configuration, not an add-on.
 - **Sample configurations** (Decided). A handful of ready-made boot setups,
@@ -120,6 +123,28 @@ All were taken on 2026-10-27.
 26. The sample configurations are five Practices: Everyday, Workshop, Study
     and Publishing in the alpha, and Investigation after it (Part 6). The
     set can change later.
+27. LM1 first shows what it does for Desk. The sandbox's jobs run on LM1,
+    where typed values are tagged words, allocation and collection happen in
+    hardware, and capability mode keeps jobs apart (Part 9c). Desk's
+    growing, linked data follows as managed data (decision 28, Part 9d). The
+    Lisp console is a learning tool in the Workshop (Part 7), and LM1's side
+    of this work is written in Lisp.
+28. LM1's collector manages only data in LM1's tagged format. Forth's memory
+    doesn't mark which numbers are pointers, so no collector can manage it,
+    wherever LM1 sits, and Forth's own buffers stay under manual control. A
+    pointer mark on every word of MegaPad's memory would lift that limit,
+    but it would change MegaPad's hardware and every Forth word that stores
+    a reference, so it is not adopted. Desk code that wants its data
+    collected creates it as managed data instead: LM1 objects in shared
+    memory, made through an Akashic library and used under the rules in
+    Part 9d.
+29. MegaPad and LM1 share memory. Each chip reads and writes the other's
+    data where it lies, so nothing is copied between them. The cost that
+    remains is the hand-off when one chip asks the other to do work,
+    signaling it and waiting for the answer, so work crosses as whole jobs.
+    A hand-off would cost about the same on one die, and moving LM1 onto
+    MegaPad's die wouldn't change the collector's limit either
+    (decision 28), so LM1 stays a chiplet.
 
 ## 3. Open decisions
 
@@ -140,14 +165,18 @@ are chosen when LM1 work starts. Three questions remain:
 - how many tiles and clusters that demand calls for;
 - where the chiplet's main memory lives.
 
-For main memory there are two options. Its own memory, such as HBM or
-LPDDR, is fast and keeps Lisp heap and GC traffic off MegaPad's bus, but it
-makes the package more complex. MegaPad's memory, reached over the link, is
-cheaper and simpler, but Lisp then shares bandwidth with Desk. Recommended: a
-short sizing study as the first step of Part 8b, covering the Lisp work
-Leviathan's Practices give LM1, an area budget relative to MegaPad, and the
-bandwidth of each memory option. The study comes back with numbers before anything is chosen.
-Blocks Part 8b.
+For main memory there are two options, and the chips share memory under
+either (decision 29). Its own memory, such as HBM or LPDDR, is fast and
+keeps LM1's heap and collector traffic off MegaPad's bus, but it makes the
+package more complex, and MegaPad's reads of managed data then cross the
+link. MegaPad's memory, reached over the link, is cheaper and simpler, but
+LM1's heap and collector then share bandwidth with Desk. Recommended: a
+short sizing study as the first step of Part 8b. It measures the work
+Leviathan gives LM1, which is sandbox jobs and Desk's managed data
+(decisions 27 and 28), including how often MegaPad reads that data and how
+much traffic the collector adds. It also sets an area budget relative to
+MegaPad and compares the bandwidth of each memory option. The study comes
+back with numbers before anything is chosen. Blocks Part 8b.
 
 ## 4. Where things stand
 
@@ -532,8 +561,9 @@ is queued by autoexec text.
 Each configuration is a Practice built around a task or subject
 (decision 25). It binds the material the work needs, sets what the Agent,
 scheduled actions and sandboxed tools may do there, and opens what the work
-calls for. LM1 is part of the machine in all of them, and each Practice
-uses Lisp where its work calls for it.
+calls for. LM1 is part of the machine in all of them. It runs their
+sandboxed tools, holds managed data where their work builds it up, and runs
+Lisp where the work calls for it.
 
 The set (decision 26). The names are working names, and the set can change.
 
@@ -549,19 +579,20 @@ The set (decision 26). The names are working names, and the set can change.
   modules safely. The Agent explains code and helps write modules.
 - **Study.** A Practice around one subject: a corpus of documents and PDFs,
   feeds that follow the subject, notes and tables, and a growing map of the
-  subject's concepts kept in Lisp on LM1, which is new work. The Agent
-  summarizes with citations to the bound sources. It ships with one sample
-  subject, whose material must be freely licensed.
+  subject's concepts. The map is new work, kept on LM1 as managed data. The
+  Agent summarizes with citations to the bound sources. It ships with one
+  sample subject, whose material must be freely licensed.
 - **Publishing.** Writing for the web: drafts in Pad, a small website served
   by the machine's own web server, a feed of the posts, and posting to
   Bluesky. The feed writer is new work, since Akashic's feed code only reads
   today. The Agent drafts, and nothing goes out without approval.
 - **Investigation** (after the alpha). The Detective Box idea as a
   Practice: evidence kept tamper-evident with hashes from MegaPad's SHA-3
-  hardware, a timeline, a graph of people, things and events reasoned over
-  in Lisp on LM1, and findings that link back to their evidence. The Agent
-  may propose links but never changes evidence. It needs new parts, an
-  evidence store and the graph, so it is the largest.
+  hardware, a timeline, a graph of people, things and events, and findings
+  that link back to their evidence. The graph lives on LM1 as managed data,
+  and Lisp reasons over it. The Agent may propose links but never changes
+  evidence. It needs new parts, an evidence store and the graph, so it is
+  the largest.
 
 Sound Lab and Observatory are not configurations as they stand; whether
 they ship as applets follows from the inventory (Part 1d).
@@ -583,7 +614,7 @@ journey. Investigation follows the same steps after the alpha.
 
 ### Part 7. The System Practice
 
-Needs Parts 1d, 2 and 5, and Part 9 for its Lisp half.
+Needs Parts 1d, 2 and 5, and Part 9e for its Lisp half.
 
 Contents:
 
@@ -592,7 +623,7 @@ Contents:
 - Pad and Explorer;
 - a Forth console applet, which doesn't exist yet. It loads modules from the
   user area and shows what they do;
-- the Lisp console on LM1 (Part 9), so both of Leviathan's engines can be
+- the Lisp console on LM1 (Part 9e), so both of Leviathan's engines can be
   learned side by side;
 - the library reference, readable from inside the system.
 
@@ -621,6 +652,16 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
     memory (D8).
   - Have MegaPad load and start the Lisp runtime over the link.
   - Turn the GC and runtime-setup traps into real hardware controls.
+  - Make capability mode a required part of the chiplet. The spec lists it
+    as optional, and the sandbox relies on it to keep jobs apart
+    (decision 27).
+  - Let LM1 compute with full 64-bit integers that wrap, as the sandbox's
+    do, without the collector mistaking them for references. LM1's fixnums
+    hold 63 bits and trap on overflow.
+  - Give the objects MegaPad holds a place among the collector's roots, and
+    define how MegaPad's writes reach the collector's records (decision 28).
+    The spec's roots cover only LM1's own registers, stacks, tables and
+    buffers.
   - Answer two questions raised in March. Does LM1 get its own built-in
     self-test, or does MegaPad run one for the whole package? Does LM1 adopt
     MegaPad's hard QoS and one-instruction-per-cycle rule?
@@ -628,8 +669,10 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
 
   As with MegaPad, the RTL describes the chip we want. Fitting the FPGA is
   not a gate.
-- **8c. The MegaPad link.** One spec covers doorbells and mailboxes, shared
-  memory windows and DMA, interrupts, loading and starting programs, errors,
+- **8c. The MegaPad link.** One spec covers doorbells and mailboxes, the
+  shared memory both chips read and write (decision 29), handing jobs over
+  and results back, MegaPad's side of managed data (handles, writes and the
+  windows in Part 9d), interrupts, loading and starting programs, errors,
   reset and test access. Proposed: the spec lives in `lm1/` as the chiplet's
   interface, and MegaPad implements the host side.
 - **8d. The chiplet module** (Decided). LM1's model is written in
@@ -643,7 +686,8 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   MegaPad's side of the link to its SoC.
 - **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
   build the Lisp runtime image that MegaPad loads.
-- **8g. Verification.** Link conformance tests are shared by the chiplet
+- **8g. Verification.** Link conformance tests, including handles that
+  survive a collection and writes from MegaPad, are shared by the chiplet
   module, the Python reference and both RTL sides. Close the RTL test gaps
   listed in `docs/test_gap_ideas.md`.
 
@@ -655,6 +699,10 @@ same link tests.
 
 Needs Part 5 and Parts 3d, 8c and 8d.
 
+LM1 first shows what it does for Desk (decision 27): the sandbox's jobs run
+on it, and the data Desk wants collected lives in its heap. Lisp is how
+LM1's side is written, and the Lisp console is a learning tool.
+
 - **9a.** MegaPad gets a system module for the chiplet, following
   `networking.f` and `rich-terminal.f`. MegaPad owns it, and system
   composition loads it at boot, since every configuration runs on
@@ -662,14 +710,50 @@ Needs Part 5 and Parts 3d, 8c and 8d.
 - **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
-- **9c.** A Lisp console applet talks to the chiplet's REPL, which
-  `spec/06` places in the chiplet's own runtime along with the compiler. Any
-  Practice can include it; the Workshop does, and Study and Investigation use
-  Lisp for their concept map and graph. Pad holds programs, and examples
-  come with it.
+- **9c. The sandbox on LM1.** LM1 gets an engine that runs verified sandbox
+  plans with the same results, limits and budgets as the MegaPad engine. The
+  job service lends runnable jobs to LM1 the way it lends them to worker
+  cores, so applets use the sandbox as before. In October 2026, Akashic's
+  sandbox benchmark (`local_testing/sandbox-vm-bench.f`) measured one
+  typed-value read at about 29,000 MegaPad cycles, almost all of it spent
+  checking the value's handle in `value.f`. On LM1, typed values are tagged
+  words, and capability mode keeps references from being forged and each
+  job apart from the others, so the hardware does that checking. The
+  MegaPad engine stays the reference until LM1's engine passes the same
+  sandbox tests.
+- **9d. Managed data.** Through the library in 9b, Desk code creates LM1
+  objects in shared memory, and LM1's collector frees whatever nothing uses.
+  Forth code works with these objects under four rules:
+  1. It reads them directly.
+  2. It writes them only through the library's words, which keep the
+     collector's records.
+  3. It works with them only inside short windows, and inside one it can
+     follow references freely. The collector waits for open windows to
+     close before it moves shared objects.
+  4. Anything it keeps past a window, it keeps as a handle. The collector
+     treats handles as in use and updates them when objects move. Each
+     handle belongs to an owner Desk already tracks, such as an applet, a job
+     or a document. All of an owner's handles are released when the owner
+     closes, as the job service already discards a closing owner's jobs.
 
-Done when, in the Workshop, a journey evaluates Lisp expressions and runs a
-program written in Pad on LM1, all through Desk's normal path.
+  Forth code therefore never frees managed objects one at a time or sizes
+  them in advance, while its own buffers, such as screen frames, stay as
+  they are. Study's concept map is the first user, and Investigation's graph
+  follows after the alpha. Feeds, records and documents move over as applets
+  need them.
+- **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
+  `spec/06` places in the chiplet's own runtime along with the compiler. The
+  Workshop includes it for learning (Part 7), and any Practice can. Pad holds
+  programs, and examples come with it.
+
+Done when, through Desk's normal path:
+
+- an applet's sandbox job runs on LM1 and returns the MegaPad engine's
+  result;
+- managed data keeps the objects Forth holds through collections, and
+  closing an applet releases every handle it held;
+- in the Workshop, a journey evaluates Lisp expressions and runs a program
+  written in Pad on LM1.
 
 ### Part 10. Documentation
 
@@ -683,7 +767,7 @@ The planned set:
 - Desk and its applets;
 - Practices, and what each sample configuration's Practice does;
 - programming the machine: Forth, KDOS and the libraries;
-- the LM1 chiplet and Lisp;
+- the LM1 chiplet: the sandbox on LM1, managed data, and Lisp;
 - hardware reference: MegaPad, LM1 and the link;
 - library reference, covering shipped libraries only (from Part 1d).
 
@@ -722,8 +806,9 @@ Needs every other part.
    Agent's and Streams' outside services run under their own terms, with the
    user's own keys.
 5. Run the final checks: every configuration's journey, the canonical
-   Desktop journey, LM1's emulator and RTL tests, and the link conformance
-   tests. Each heavy run goes alone, under the workspace rules.
+   Desktop journey, the sandbox tests on both engines, LM1's emulator and
+   RTL tests, and the link conformance tests. Each heavy run goes alone,
+   under the workspace rules.
 6. Tag every component with the release version, 0.1.0 (decision 21), and record the
    commits.
 7. Write release notes about function.
@@ -745,6 +830,10 @@ or before a chip is made, a lawyer reviews the licensing.
   onto ext4 once Part 2 lands.
 - Part 6 needs Parts 4 and 5. Part 7 needs Parts 1d, 2 and 5. Part 9 needs
   Part 5 and Parts 3d, 8c and 8d.
+- Within Part 9, the sandbox (9c) comes first, since it needs only jobs
+  handed over and results handed back. Managed data (9d) follows once the
+  link's handle and window rules are specified, and Study's concept map
+  waits for it.
 - Part 10 grows with every part and is finished before Part 11.
 - Each part starts on approval.
 
