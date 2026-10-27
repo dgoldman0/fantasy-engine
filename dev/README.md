@@ -20,6 +20,14 @@ that must stay private goes elsewhere.
 
 The topic files so far:
 
+- [language.md](ideas/language.md): the language that spans both chips,
+  beyond what decisions 30 to 32 settle.
+- [use-cases.md](ideas/use-cases.md): what people might do with Fantasy
+  Engine beyond the plan's Practices.
+- [release-scope.md](ideas/release-scope.md): what the first release should
+  include or leave out.
+- [future-releases.md](ideas/future-releases.md): what comes after the first
+  release.
 - [applet-concepts.md](ideas/applet-concepts.md): Observatory, Worlds and
   the directions around them, a July 2026 note that predates both applets.
 - [native-filesystem.md](ideas/native-filesystem.md): the filesystem derived
