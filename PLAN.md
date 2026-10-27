@@ -9,8 +9,8 @@ work from now until that release ships.
 else here will document use and function. This file is deleted when the
 release ships, and its history stays in git.
 
-Status on 2026-10-27: Daniel locked the plan in. Part 1 (organization) is
-under way: Part 1c, the LM1 split, is done, and Part 1d, the library
+Status on 2026-10-27: the plan is locked in. Part 1 (organization) is under
+way: Part 1c, the LM1 split, is done, and Part 1d, the library
 inventory, has its first static pass. The Chimera prototype that used to
 live here is kept by the tag `archive/chimera-a499082-20261027`, and commit
 54616ae removed it from the tree.
@@ -21,9 +21,9 @@ stands today. Section 5 sets out the work in eleven parts, each with its
 steps, what "done" means and what it needs first. Sections 6 and 7 give the
 order of the parts and the rules the work follows.
 
-Three labels mark the status of each item. **Decided** means Daniel has
-decided it. **Proposed** means it still needs Daniel's approval. **Open**
-means a decision Daniel has yet to make.
+Three labels mark the status of each item. **Decided** items are settled.
+**Proposed** items await approval. **Open** items are decisions still to be
+made.
 
 ## 1. What the release is
 
@@ -94,7 +94,7 @@ All were taken on 2026-10-27.
 
 ## 3. Open decisions
 
-Each entry gives what Daniel needs to decide it without other reading: the
+Each entry gives what is needed to decide it without other reading: the
 background, the options with their consequences, a recommendation, and what
 it blocks.
 
@@ -106,8 +106,8 @@ be the public name. The names appear in every user document, so they are
 best settled before Part 4's command and Part 10's documents. Each candidate
 is first checked against existing trademarks in software and hardware. Two
 obvious options are naming the whole machine Leviathan, or calling the
-system Fantasy Engine after this repository. No recommendation: naming is
-Daniel's choice. Blocks Part 4's command and Part 10.
+system Fantasy Engine after this repository. No recommendation is made for
+names. Blocks Part 4's command and Part 10.
 
 **D4. Version scheme.** A version number tells users which release they
 have, and lets bug reports name it. Nothing is tagged anywhere yet, and the
@@ -162,9 +162,9 @@ macOS can follow later. Blocks Part 11.
 
 **D8. LM1's product scale.** This sets what LM1 becomes as a chiplet. Today's
 spec describes a standalone accelerator: 256 tiles in 32 clusters, 256 KiB of
-SRAM per tile and 2 MiB per cluster, and 32 GiB of HBM3E. Daniel considers
-the per-tile and per-cluster SRAM toy-scale, and the FPGA build fits only one
-8-tile cluster. Three questions follow:
+SRAM per tile and 2 MiB per cluster, and 32 GiB of HBM3E. The per-tile and
+per-cluster SRAM are toy-scale, and the FPGA build fits only one 8-tile
+cluster. Three questions follow:
 
 - how much on-chip memory each tile and cluster gets, since more per tile
   means fewer tiles in the same area;
@@ -349,9 +349,9 @@ repository and commit. The build takes exactly those commits, with
 `git archive` from the checkouts in the workspace or from a fresh clone when
 they're absent, so a dirty or switched checkout can't leak into a build.
 Moving a component forward is a one-line commit here, and the file's history
-records which combination passed which checks. Proposed: because Daniel
-pushes by hand, the tool warns when a recorded commit isn't on its
-component's remote yet. Done when one command assembles every component at
+records which combination passed which checks. Proposed: since pushes are
+made by hand, the tool warns when a recorded commit isn't on its component's
+remote yet. Done when one command assembles every component at
 its recorded commit from a fresh checkout.
 
 **1c. Split LM1 into the chiplet.** Done on 2026-10-27, LM1 commit 0afe4af.
@@ -398,18 +398,17 @@ Next steps:
    group at a time, within the workspace's resource rules. The full rich
    test set peaks near 9.2 GiB in one process, so it runs in pieces.
 2. Record each library's status in Appendix A.
-3. For each library that is out, Daniel decides whether Akashic finishes it,
-   retires it by archive tag, or keeps it outside the release.
+3. Each library that is out gets a decision: Akashic finishes it, retires
+   it by archive tag, or keeps it outside the release.
 
 Done when every library has a status and every library that is out has a
 decision.
 
-**1e. Retire the scrap copies.** `~/Documents/scrap/list-machine` and
-`~/Documents/scrap/fantasy-engine`, with their identical backups under
-`/media/projectspace/random_backup`, hold nothing the workspace lacks once
-two things happen: fantasy-engine's commits are pushed, and Daniel decides
-about the never-committed `tools/mem_hierarchy_sim.py`. They are deleted only
-on Daniel's go-ahead.
+**1e. Retire the old working copies.** Older copies of LM1 and of this
+repository outside the workspace hold nothing the workspace lacks once this
+repository's commits are pushed and the old LM1 copy's never-committed
+memory-hierarchy simulator has a decision. They are deleted only on
+approval.
 
 **1f. Component fixes the release depends on** (Proposed). MegaPad's four
 temporary import aliases go. `bios.rom` is either built or tracked, not both;
@@ -661,8 +660,8 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   `alloc_nursery_overflow` fails. The chiplet module in 8d builds on this
   emulator, so it should start from green.
 - **8b. Product-scale design** (needs D8). Revise the spec for a chiplet:
-  - Size it for production. Daniel considers the current 256 KiB per tile
-    and 2 MiB per cluster toy-scale. Interface limits stay fixed at
+  - Size it for production. The current 256 KiB per tile and 2 MiB per
+    cluster are toy-scale. Interface limits stay fixed at
     production size, and resource limits follow need.
   - Replace PCIe, NVMe, 100 GbE and the display engine with the MegaPad
     link, since MegaPad handles I/O and Desk handles the display.
@@ -793,16 +792,17 @@ or before a chip is made, a lawyer reviews the licensing.
 - Part 6 needs Parts 4 and 5. Part 7 needs Parts 1d, 2 and 5. Part 9 needs
   Part 5 and Parts 3d, 8c and 8d.
 - Part 10 grows with every part and is finished before Part 11.
-- Each part starts on Daniel's approval.
+- Each part starts on approval.
 
 ## 7. Working rules
 
 The workspace `AGENTS.md` governs this work. In short:
 
-- Commit each coherent slice once it is green, with an informative message.
-  Commits are authored as Daniel, and an assistant is credited only by a
-  Co-Authored-By trailer. Never amend a commit; add a new one. Daniel
-  pushes.
+- Commit each coherent slice once it is green, with an informative message
+  that presents each decision and its reasons as the project's own, without
+  quoting or narrating anyone. Commits carry the maintainer's authorship, and
+  an assistant is credited only by a Co-Authored-By trailer. Never amend a
+  commit; add a new one. The maintainer pushes.
 - Test narrowly while working: unit and focused tests, then Desk with only
   the applets a change touches. The physical Desktop journey is the
   regression gate. It runs once, at the end of a slice that touches the rich
