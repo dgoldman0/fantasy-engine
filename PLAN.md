@@ -145,6 +145,49 @@ All were taken on 2026-10-27.
     A hand-off would cost about the same on one die, and moving LM1 onto
     MegaPad's die wouldn't change the collector's limit either
     (decision 28), so LM1 stays a chiplet.
+30. Leviathan gets a language of its own that spans both chips. Existing
+    languages each assume one kind of memory. Lisp, Factor, Joy, Erlang and
+    Pony let a collector own every value, stacks included, while Forth has
+    no managed values at all. The nearest exceptions each miss part of it:
+    PreScheme compiles its manual level ahead of time, so the two never mix
+    at run time; Rust tracks lifetimes precisely but has no collected side;
+    and HP's RPL ran its two levels over one collected memory on one chip.
+    WebAssembly with garbage collection has decision 28's split, raw memory
+    plus managed references kept there only as handles, but it is a compile
+    target rather than a language people write. None treats two instruction
+    sets as one program.
+    The language is new rather than a derivative. Factor comes closest, but
+    its libraries need Factor's VM, and what would change (one collected
+    heap, a tagged stack, open authority) is its core, so a derivative would
+    keep only its look. The compatibility that matters is with Akashic's
+    Forth and LM1's Lisp data: the language's raw side is Forth itself, so
+    Akashic's words are its library as they stand, and Lisp lists written in
+    it are LM1 lists.
+31. The language's shape is set. Words carry checked stack effects, as
+    Factor's do, written as Forth's stack comments with kinds added: cell,
+    span (memory the caller provides and bounds), ref, handle, and LM1's
+    typed values. New raw words compile to ordinary Forth words that any
+    Forth code can call. A window is syntax. Inside one, refs can be
+    followed freely; the checker refuses a ref that would leave it, a keep
+    word turns a ref into a handle tied to an owner, and writes to managed
+    objects compile to the library's barrier words, so Part 9d's rules
+    become compile errors rather than conventions. Cells wrap at 64 bits,
+    and integers are exact. Quotations on the raw side can't outlive the
+    word that made them, since an escaping closure needs allocation;
+    escaping closures are LM1 closures. Each word or module names the chip
+    it runs on, and a call across chips is an explicit job sent through the
+    job service, whose result arrives later. Managed words get authority
+    only as values passed to them. The subset with no raw memory, holding
+    authority only as capabilities, could compile to the sandbox's artifact
+    format, while the sandbox's own source language stays as its
+    documentation ratifies it.
+32. Work on the language starts once Part 9d is built, and the release
+    doesn't wait for it. The first step is a checker for 9d's rules alone,
+    because tracking refs through stack shuffles and quotations is untested
+    and may prove awkward; syntax waits for that checker. Until then, 9d's
+    rules are written precisely enough for a checker to enforce them. The
+    language stays small, Forth plus kinds, windows and placement, so that
+    it doesn't split the library across a third language.
 
 ## 3. Open decisions
 
@@ -740,7 +783,8 @@ LM1's side is written, and the Lisp console is a learning tool.
   them in advance, while its own buffers, such as screen frames, stay as
   they are. Study's concept map is the first user, and Investigation's graph
   follows after the alpha. Feeds, records and documents move over as applets
-  need them.
+  need them. The rules are written precisely enough for a checker to enforce
+  them (decision 32).
 - **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds
