@@ -17,3 +17,10 @@ stays in the commit message that removes it.
 
 The repository is public, so everything here is public once pushed. Material
 that must stay private goes elsewhere.
+
+The topic files so far:
+
+- [applet-concepts.md](ideas/applet-concepts.md): Observatory, Worlds and
+  the directions around them, a July 2026 note that predates both applets.
+- [native-filesystem.md](ideas/native-filesystem.md): the filesystem derived
+  from ext4 that would follow standard ext4, a July 2026 note.
