@@ -9,16 +9,17 @@ work from now until that release ships.
 else here will document use and function. This file is deleted when the
 release ships, and its history stays in git.
 
-Status on 2026-10-27: Part 1 (organization) has started. The Chimera
-prototype that used to live here is kept by the tag
+Status on 2026-10-27: Part 1 (organization) is under way. Part 1c, the LM1
+split, is done, and Part 1d, the library inventory, has its first static
+pass. The Chimera prototype that used to live here is kept by the tag
 `archive/chimera-a499082-20261027`, and commit 54616ae removed it from the
 tree.
 
 Section 1 says what the release is. Sections 2 and 3 list the decisions
 taken and the decisions still open. Section 4 records where each component
-stands today. Section 5 sets out the work in ten parts, each with its steps,
-what "done" means and what it needs first. Sections 6 and 7 give the order of
-the parts and the rules the work follows.
+stands today. Section 5 sets out the work in eleven parts, each with its
+steps, what "done" means and what it needs first. Sections 6 and 7 give the
+order of the parts and the rules the work follows.
 
 Three labels mark the status of each item. **Decided** means Daniel has
 decided it. **Proposed** means it still needs Daniel's approval. **Open**
@@ -55,8 +56,8 @@ All were taken on 2026-10-27.
    54616ae removed it from the tree.
 3. The first release includes the LM1 chiplet. Work toward the release
    builds up here while LM1 catches up.
-4. The LM1 repository becomes the chiplet only. Its own OS and desktop are
-   retired the same way as Chimera: an archive tag, then removal (Part 1c).
+4. The LM1 repository becomes the chiplet only, with its own OS and desktop
+   retired by archive tag. This is done (Part 1c).
 5. Practices keep their name. Each sample configuration is built around one
    Practice.
 6. One Practice is about the system itself, including its libraries.
@@ -64,26 +65,53 @@ All were taken on 2026-10-27.
    scrap stays out.
 8. Release documentation covers use and function only. This file is the one
    exception, and it goes when the release ships.
+9. The release filesystem is ext4, supported to a reasonable degree rather
+   than completely (Part 2).
+10. Three items lead the work: reasonable ext4 support (Part 2), proper
+    multicore support in the simulator (Part 3) and the LM1 chiplet
+    (Part 8).
+11. The LM1 chiplet's model is accelerated C++, written as a module that
+    MegaPad's simulator imports. MegaPad's work therefore includes importing
+    chiplet modules (Parts 3d and 8d).
 
 ## 3. Open decisions
 
 Each entry names what it blocks.
 
-**D1. How the release locks component versions.** Daniel is weighing this.
-It blocks Part 1b. There are two usual ways:
+**D1. How the components come together.** Daniel is weighing this. It
+blocks Part 1b. There are three ways:
 
-- Git submodules. This repository records each component's commit itself,
-  and `git clone --recursive` fetches everything. In this workspace, though,
-  it would add a second checkout of each component inside fantasy-engine,
-  beside the checkouts already here.
-- A lock file. A small file names each repository and commit, and the build
-  takes exactly those commits, for example with `git archive`, which leaves
-  the working checkouts alone. There are no second checkouts, but the build
-  tool must fetch any component that isn't present.
+- **A lock file.** This repository holds a small file naming each
+  component's repository and commit. The build takes exactly those commits,
+  with `git archive` from the checkouts already in the workspace or from a
+  fresh clone when they're absent, so a dirty or switched checkout can't
+  leak into a build. Moving a component forward is a one-line commit here,
+  which also records which combination passed which checks. Nothing changes
+  in how `megapad/`, `akashic/` and `lm1/` are worked on. The costs are a
+  small fetch-and-verify tool, and GitHub shows the commits only as text.
+- **Git submodules.** This repository records each component as a submodule
+  at a commit, `git clone --recursive` fetches everything, and GitHub links
+  each component to its exact commit. In this workspace, though, each
+  component would get a second checkout inside fantasy-engine, unless the
+  working checkouts move inside it, which changes every path, worktree and
+  the image builder's sibling lookup. Submodules also check out detached
+  heads, so commits made there are easy to lose, and pushes must go
+  submodule first, pointer second.
+- **One repository.** `megapad/`, `akashic/` and `lm1/` move into one
+  repository with their history. Every commit is then one consistent state of
+  everything, with no locking and no paired branches: work such as
+  frames-follow-change, which needs matching branches in two repositories and
+  an integration step, becomes one branch. The costs are a large one-time
+  migration and a different public face. In-flight branches land first.
+  Tooling paths, worktrees and the Desktop journey's clean-tree guard need
+  adjusting, so that unrelated edits don't block a run. The old GitHub
+  repositories are archived with pointers. The repository then holds all
+  development material, so users see a clean face only through the packaged
+  download and the `docs/` tree.
 
-Either way, each release also tags its commit in every component. Proposed:
-the lock file. The workspace already keeps the components as sibling
-checkouts, and Akashic's image builder already finds MegaPad as its sibling.
+Proposed: the lock file, now. It keeps this repository the clean front door
+and changes nothing in daily work. One repository stays possible later if
+paired branches keep costing integration sessions.
 
 **D2. Licences.** No repository has a LICENSE file. MegaPad's README says
 "CC0 (for all components not superseded by existing licenses)". LM1's README
@@ -93,38 +121,36 @@ sample photo is public domain. MegaPad also tracks third-party material:
 `cdp1802.pdf`, and Unicode-derived data in `rich_terminal/text_data.py`. The
 release needs a licence for each component, notices for third-party
 material, and a decision about what may be redistributed at all. Blocks
-Part 10.
+Part 11.
 
 **D3. Names.** What people call the system, and the name of the command that
-runs it. Blocks Part 3's command and the documents in Part 9.
+runs it. Blocks Part 4's command and the documents in Part 10.
 
 **D4. Version scheme.** Nothing is tagged yet. The BIOS banner says v1.0,
 KDOS says v1.1, the native extensions say 0.1.0, and MegaPad's
 `ROADMAP-v1.0.md` plans a v1.0 of its own. Proposed: one version for the
-whole release, tagged in every component. Blocks Part 10.
+whole release, tagged in every component. Blocks Part 11.
 
 **D5. Whether the use-and-function rule also covers the component
 repositories.** Their docs mix reference material with plans, handoffs and
-evidence. Blocks the scope of Part 9.
+evidence. Blocks the scope of Part 10.
 
 **D6. Platforms.** The system runs only on Linux today. Sessions use
 AF_UNIX sockets, networking uses a Linux TAP device, tests use POSIX process
 groups, and the emulator's JIT exists only for Linux on x86-64. The native
 extensions build with `-march=native`, which ties each binary to the kind of
-CPU that built it. Blocks Part 10.
-
-**D7. The release filesystem.** Part 2 sets out the choices. Blocks Parts 2
-and 6.
+CPU that built it. Blocks Part 11.
 
 **D8. LM1's product scale.** How many tiles and clusters, how much SRAM per
 tile and per cluster, and whether the chiplet keeps its own HBM or uses
-MegaPad's memory. Blocks Part 7a.
+MegaPad's memory. Blocks Part 8b.
 
-**D9. Which configurations ship.** Part 5 proposes six.
+**D9. Which configurations ship.** Part 6 proposes six.
 
 ## 4. Where things stand
 
-These facts come from read-only surveys of each repository on 2026-10-27.
+These facts come from read-only surveys of each repository on 2026-10-27,
+updated for the work done since.
 
 ### MegaPad (`megapad/`, 915 tracked files)
 
@@ -137,6 +163,11 @@ These facts come from read-only surveys of each repository on 2026-10-27.
   requirements file and no package metadata. The README asks for Python
   3.12, `docs/getting-started.md` says 3.8 or later, and the extensions in
   the tree are built for 3.13.
+- The hosted simulator supports exactly one full core, by contract
+  (`docs/simulator-contract.md`). It hard-codes its device windows
+  (`OneCorePlatformMMIO` in `simulator/platform.py`), and hybrid routines get
+  no MMIO. The emulator runs several full cores in lock-step on one host
+  thread, and new devices attach to it easily.
 - About a third of the 61 top-level files are benchmarks or one-off scripts.
   Four are temporary import aliases: `megapad64.py`, `system.py`,
   `devices.py` and `accel_wrapper.py`.
@@ -150,9 +181,8 @@ These facts come from read-only surveys of each repository on 2026-10-27.
   UDP backend only links emulator instances. Reaching real servers takes the
   TAP device `mp64tap0`, whose one-time setup needs `sudo`, plus forwarding
   rules for internet access.
-- New devices attach easily to the emulator. The native simulator
-  hard-codes its device windows and models one core. The MMIO map appears to
-  have room above +0xC20, and port-bridge ports 4, 5 and 7 are unassigned.
+- The MMIO map appears to have room above +0xC20, and port-bridge ports 4, 5
+  and 7 are unassigned.
 - Nothing in MegaPad mentions LM1.
 
 ### Akashic (`akashic/`, 697 library files in 31 groups)
@@ -176,27 +206,28 @@ These facts come from read-only surveys of each repository on 2026-10-27.
   calls "not secure Practice enrollment".
 - The filesystem bindings are MP64FS (read and write), FAT (read-only) and
   ext4 (read-only, plus a staged write mode labelled a
-  "controlled/trusted-local preview"). The image builder and the boot path
-  use MP64FS only.
+  "controlled/trusted-local preview", limited to 1 KiB blocks and 256-byte
+  inodes). The image builder and the boot path use MP64FS only.
 - The 512 test files all live in `local_testing/`.
 
-### LM1 (`lm1/`, 240 tracked files)
+### LM1 (`lm1/`, 215 tracked files)
 
 - It holds a spec (`spec/00` to `spec/07`), RTL (28 SystemVerilog files), an
-  FPGA target, a Python emulator with a C accelerator, an assembler, a Lisp
-  compiler, and its own OS and desktop (Crystal).
-- The spec describes a standalone SoC: 256 tiles in 32 clusters, 256 KiB of
-  SRAM per tile and 2 MiB per cluster, 32 GiB of HBM3E, PCIe, NVMe, 100 GbE
-  and an on-die display engine. It defines no link to MegaPad. It
-  contradicts itself on the SRAM total (§3.1) and on the cluster count in its
-  floorplan (§12.1).
-- The emulator has 402 tests in its own harness: 87 for the core, 87 for the
-  toolchain and 228 for the OS and desktop. 41 RTL tests run on Verilator
-  against a single core; the tile, cluster and GC-engine RTL is not
-  simulated. The FPGA flow stops at synthesis, at about 90K LUTs for one
-  8-tile cluster.
-- Several stated counts are stale. The README says 258 emulator tests and 42
-  RTL tests.
+  FPGA target, a Python emulator with a C accelerator, an assembler and a
+  Lisp compiler. Its own OS and desktop were archived on 2026-10-27
+  (Part 1c).
+- The spec still describes a standalone SoC: 256 tiles in 32 clusters,
+  256 KiB of SRAM per tile and 2 MiB per cluster, 32 GiB of HBM3E, PCIe,
+  NVMe, 100 GbE and an on-die display engine. It defines no link to MegaPad.
+  It contradicts itself on the SRAM total (§3.1) and on the cluster count in
+  its floorplan (§12.1).
+- The emulator has 172 tests in its own harness, and nine of them fail on
+  main. Eight GC tests use a `CARD_SIZE` that commit 6a40bd2 replaced with
+  `card_shift` in February, and `alloc_nursery_overflow` fails. The same
+  nine failed before the split.
+- 41 RTL tests run on Verilator against a single core; the tile, cluster and
+  GC-engine RTL is not simulated. The FPGA flow stops at synthesis, at about
+  90K LUTs for one 8-tile cluster.
 
 ### Work under way elsewhere
 
@@ -226,42 +257,22 @@ fantasy-engine/
 ```
 
 `README.md` and `docs/` arrive with the first configuration that runs
-(Part 3), so nothing here describes plans. Nothing in this repository copies
+(Part 4), so nothing here describes plans. Nothing in this repository copies
 component source.
 
-**1b. Lock the components** (needs D1, the locking mechanism). Record the
-commit of each component's main branch, and update it as parts land. Done
-when one command assembles every component at its recorded commit from a
-fresh checkout.
+**1b. Bring the components together** (needs D1). Record each component's
+commit and update it as parts land. Done when one command assembles every
+component at its recorded commit from a fresh checkout.
 
-**1c. Split LM1 into the chiplet** (approach Decided; file list Proposed).
-
-1. Tag LM1's current main as `archive/lm1-os-desktop-<commit>-<date>`.
-2. Remove the OS and desktop:
-   `emu/lm1/{bios,crystal,desktop,desktop_test_driver,toolkit,vdi,font,icons,vfs}.py`,
-   `emu/lm1/fonts/`, `tools/compile_font.py`, `design/{bios,os,desktop}.md`,
-   `crystal_desktop_v2.png`, and their tests,
-   `emu/tests/test_phase{7,9,10,11,13,15}.py`.
-3. Cut the remaining ties to them: the display trap's handler (0x83) and its
-   import in `emu/lm1/execute.py`, the `desktop` command in
-   `emu/lm1/__main__.py`, the `vdi-*` builtins in `emu/lm1/compiler.py`, the
-   two BIOS-boot tests in `test_phase8.py`, and the display tests and unused
-   BIOS import in `test_phase14.py`.
-4. Keep the other emulator traps for now. The console, block I/O and
-   byte-memory traps serve the tests until the MegaPad link replaces them
-   (Part 7). The GC and runtime-setup traps (0x90 to 0x96) stand in for
-   hardware controls that Part 7a will define. The compiler's "OS entry
-   point" also stays: it starts the compiled Lisp runtime, which MegaPad will
-   start over the link instead of a BIOS.
-5. Remove `BUILD-PLAN.md` and `ideas.md`, which plan the standalone machine
-   and its desktop. Their notes on performance and architecture stay readable
-   through the tag for Part 7a. Keep `docs/test_gap_ideas.md` as input to
-   Part 7f, and keep `design/emulator.md` without its display and BIOS
-   sections.
-6. Rewrite the README to describe the chiplet, with correct test counts.
-
-Done when the core and toolchain tests pass, the RTL test generators still
-import, and nothing in the tree refers to a removed file.
+**1c. Split LM1 into the chiplet.** Done on 2026-10-27, LM1 commit 0afe4af.
+The tag `archive/lm1-os-desktop-e19aebd-20261027` keeps the removed work: the
+BIOS, the VFS, the display model, the Crystal desktop with its toolkit, fonts
+and icons, the font compiler, the BIOS, OS and desktop design notes,
+`BUILD-PLAN.md`, `ideas.md`, and their tests. Test phase 7 kept its
+block-device and `JR` tests. The console, block I/O, byte-memory and debug
+traps stay until the MegaPad link carries the chiplet's I/O. The GC and
+runtime-setup traps stay as stand-ins for hardware controls that Part 8b
+defines. The SoC spec's chiplet revision is Part 8b.
 
 **1d. Library inventory** (Decided; criteria Proposed). A library ships when
 it loads on the current system, its tests pass, and either something that
@@ -315,52 +326,111 @@ temporary import aliases go. `bios.rom` is either built or tracked, not both;
 it is tracked although `.gitignore` lists it. One Python version is stated
 and used.
 
-### Part 2. Storage for real images
+### Part 2. Storage: ext4
 
-Goal: a configuration's image holds the shipped libraries as ordinary files,
-with room to grow.
+One of the three leading items (Decided): reasonable ext4 support, not
+necessarily complete.
+
+Goal: a configuration's image holds the shipped libraries as ordinary files
+on ext4, with room to grow.
 
 Today, MP64FS holds 128 entries and 32 MiB, the Desktop image already fills
-32 MiB, and modules are packed into chunk files. Akashic can read ext4 and
-FAT, but the image builder and the boot path handle MP64FS only. The
-workspace's `FUTURE_FILESYSTEM_CONCEPTS.md` names an ext4-derived native
-filesystem as the long-term direction; its format is not yet ratified.
+32 MiB, and modules are packed into chunk files. Akashic's ext4 binding reads
+ext4, and its staged write mode is a preview limited to 1 KiB blocks and
+256-byte inodes. The image builder and the boot path handle MP64FS only.
 MegaPad's storage controller takes 32-bit sector numbers, and
 `docs/block-volume-contract.md` adds MBR and GPT volumes. Frames-follow-change
 part 4 added a read-only settings volume on a second storage controller; that
 work is on its branch and not yet merged.
 
+Proposed scope for "reasonable": what the release's volumes need. That
+means directories with many files, files of any size, reading the system
+volume, reading and writing the user volume, and images that standard host
+tools (e2fsprogs) can build and check. Journaling, extended attributes,
+encryption, quotas and online resizing can wait.
+
 Proposed: every configuration boots with three volumes.
 
-- **System volume, read-only.** KDOS, the system modules, and Akashic's
+- **System volume, ext4, read-only.** KDOS, the system modules, and Akashic's
   libraries and applets as plain files.
 - **Settings volume, read-only.** Changed only from the host, as
   frames-follow-change part 4 built it.
-- **User volume, writable.** Documents, Practice records and a learner's own
-  modules. The Practice head files, which the runtime writes, move here.
+- **User volume, ext4, writable.** Documents, Practice records and a
+  learner's own modules. The Practice head files, which the runtime writes,
+  move here.
 
-A read-only system volume keeps the installed libraries safe (Part 6), and
-resetting a system means replacing one file.
+A read-only system volume keeps the installed libraries safe (Part 7), and
+resetting a system means replacing one file. One design question remains.
+The BIOS loads KDOS from MP64FS today, so either a small MP64FS boot volume
+stays, or the BIOS learns to read ext4.
 
-D7 picks the filesystem. The choices are:
+Steps:
 
-- (a) ratify and build the ext4-derived native filesystem;
-- (b) grow MP64FS;
-- (c) mount the system volume through the existing read-only ext4 binding
-  while (a) is built.
+1. Settle the scope and the boot path.
+2. Extend Akashic's ext4 binding to the scope, including writes beyond the
+   preview's limits.
+3. Teach KDOS to load modules from ext4 volumes.
+4. Build ext4 images on the host.
+5. Move the image builder (Part 4a) onto them.
 
-Under the workspace's capacity rule, the chosen format's fixed limits are
-format rules sized for production, and what a volume holds follows from its
-size.
+Done when the canonical Desktop boots from an ext4 system volume that holds
+its modules as individual files, a user volume takes writes and passes the
+host's `e2fsck`, and the physical journey passes.
 
-Steps: take D7; design the volume layout and the boot path; build them in
-MegaPad (storage, KDOS boot and module loading) and Akashic (VFS binding,
-image builder); boot the canonical Desktop from the result.
+### Part 3. The simulator: multicore and chiplet modules
 
-Done when the canonical Desktop boots from a system volume that holds its
-modules as individual files, and its physical journey passes.
+One of the three leading items (Decided).
 
-### Part 3. Building and running configurations
+Goal: the native simulator runs MegaPad as the multicore machine it is, and
+loads chiplets such as LM1 as modules.
+
+Today, the hosted simulator supports exactly one full core by contract, and
+its device windows are hard-coded. The emulator runs several full cores in
+lock-step on one host thread. MegaPad's `docs/parallel-multicore-simulation-plan.md`
+and `docs/microcore-kernels-plan.md` record directions accepted on
+2026-10-27:
+
+- each core runs a round on its own host thread, and the round commits only
+  when no core touched memory another core wrote, falling back to lock-step
+  otherwise;
+- microcores run kernel words;
+- Desk's screen path stays on one core, and extra cores take background
+  work.
+
+The same documents name two open hardware gaps. The RTL microcore has 16
+registers where the design implies 32, and boot sets up no microcore stacks.
+
+- **3a. Multicore model.** The simulator models every full core, and then
+  the clusters and their microcores. Its guest-visible results match the
+  emulator's lock-step: host scheduling never picks a winner. Its contract
+  (`docs/simulator-contract.md`) moves from one core to the full topology
+  and the deterministic scheduler that contract already describes as the
+  target.
+- **3b. Parallel speed.** Speculative rounds land as a separately reviewed
+  optimization, with one-, two- and four-lane differential evidence, as the
+  parallel simulation plan requires.
+- **3c. Attaching devices.** A general way to attach devices replaces the
+  hard-coded windows, so new hardware doesn't need simulator surgery.
+- **3d. Chiplet modules** (Decided). The simulator imports a chiplet's model
+  as a C++ module through a defined interface. The interface covers link
+  endpoints, shared memory windows, interrupts, reset, and the module's place
+  in the simulator's rounds. Proposed: the emulator loads the same modules,
+  so both backends run the same chiplet model.
+- **3e. Microcore gaps.** The microcore register count and boot stacks are
+  settled before microcore simulation is built.
+
+Done when:
+
+- Desk runs on the multicore simulator, with background work on extra
+  cores;
+- differential tests agree with the emulator;
+- a test chiplet module loads and exchanges messages over its link;
+- the canonical Desktop journey passes.
+
+As the workspace rules require, results here are reported as simulator
+improvements, separate from device performance.
+
+### Part 4. Building and running configurations
 
 Goal: one command lists, builds and runs any configuration.
 
@@ -368,48 +438,48 @@ Today, only the test harness builds images. A Desktop session takes
 `akashic_tui.py serve` plus MegaPad's `session_viewer.py`, and the canonical
 profiles are test setups.
 
-- **3a.** In Akashic, move image building (closure, linking, layout and
+- **4a.** In Akashic, move image building (closure, linking, layout and
   validation) out of the test harness into a supported tool, and make the
-  harness use it. This repository calls that tool at the locked commit and
+  harness use it. This repository calls that tool at the recorded commit and
   doesn't copy it.
-- **3b.** A configuration format: one TOML file per configuration, matching
+- **4b.** A configuration format: one TOML file per configuration, matching
   Desk's own TOML settings. It names the Practice, the machine (memory,
   cores, and whether the LM1 chiplet is present), the volumes and their
   sizes, and any extra resources.
-- **3c.** The command (named by D3), with `list`, `build NAME`, `run NAME`
+- **4c.** The command (named by D3), with `list`, `build NAME`, `run NAME`
   and `new NAME FROM`, which starts a configuration of your own from an
   existing one. `run` builds when needed, starts the simulator and opens the
   viewer.
-- **3d.** Host setup: one documented way to install the dependencies and
+- **4d.** Host setup: one documented way to install the dependencies and
   build the native extensions. Networking needs either a path that works
   without administrator rights or a clear one-time setup step.
 
 Done when, on a clean Linux machine and following `README.md`, `run` boots
-the canonical Desktop configuration from locked commits, and the physical
+the canonical Desktop configuration from recorded commits, and the physical
 journey passes through the command.
 
-### Part 4. Practices open configurations
+### Part 5. Practices open configurations
 
 Goal: a configuration's Practice decides what opens and what it can reach.
 
-- **4a. Entry lenses.** A Practice declares the applets that form its entry
+- **5a. Entry lenses.** A Practice declares the applets that form its entry
   and what each opens with, and Desk realizes them when the Practice
   activates. `docs/runtime/practice.md` already splits the roles this way:
   the Practice owns the declaration, and Desk owns layout, focus and
   activation order.
-- **4b. Bindings** for each configuration's resources: documents, sample
+- **5b. Bindings** for each configuration's resources: documents, sample
   files and library roots.
-- **4c. Proper enrollment.** Release images enroll their Practice properly
+- **5c. Proper enrollment.** Release images enroll their Practice properly
   instead of the blank development Practice. This needs a design that
   follows `docs/runtime/practice.md` and `DESK_ECOSYSTEM_CONTRACT.md`.
-- **4d. One Practice per image** fits today's single-head runtime. The
+- **5d. One Practice per image** fits today's single-head runtime. The
   multiple-Practice catalog (Gate 13A in `DESK_ECOSYSTEM_CONTRACT.md`) stays
   deferred unless a configuration needs several Practices.
 
 Done when each configuration's applets open from its Practice, and no applet
 is queued by autoexec text.
 
-### Part 5. The sample configurations
+### Part 6. The sample configurations
 
 Proposed set (D9). The names are working names.
 
@@ -419,8 +489,8 @@ Proposed set (D9). The names are working names.
 | Sound | making and studying sound | Sound Lab |
 | Reading | feeds, AT Protocol and documents | Streams, Library, Pad |
 | Observatory | watching data series and models | Observatory, Worlds |
-| System | learning the system by building with it | Pad, Explorer, a Forth console, the library sources (Part 6) |
-| Lisp | the LM1 chiplet | a Lisp console, Pad (Part 8) |
+| System | learning the system by building with it | Pad, Explorer, a Forth console, the library sources (Part 7) |
+| Lisp | the LM1 chiplet | a Lisp console, Pad (Part 9) |
 
 For each configuration:
 
@@ -431,13 +501,13 @@ For each configuration:
 3. Script a journey through its main tasks, and run it narrowly, with Desk
    and that configuration's applets. The canonical Desktop journey stays the
    regression gate.
-4. Document it (Part 9).
+4. Document it (Part 10).
 
 Done when every configuration runs from the command and passes its journey.
 
-### Part 6. The System Practice
+### Part 7. The System Practice
 
-Needs Parts 1d, 2 and 4.
+Needs Parts 1d, 2 and 5.
 
 Contents:
 
@@ -455,66 +525,64 @@ Done when a learner can open a shipped library's source, write a module that
 uses it, load it and watch it run, and nothing inside the system can change
 the installed libraries.
 
-### Part 7. The LM1 chiplet
+### Part 8. The LM1 chiplet
 
-This part starts after Part 1c and runs alongside Parts 2 to 6.
+One of the three leading items (Decided). It runs alongside Parts 2 to 7.
 
-**7a. Product-scale design** (needs D8). Revise the spec for a chiplet:
+- **8a. Repair the emulator's failing tests.** Eight GC tests use the
+  `CARD_SIZE` that 6a40bd2 replaced with `card_shift`, and
+  `alloc_nursery_overflow` fails. The chiplet module in 8d builds on this
+  emulator, so it should start from green.
+- **8b. Product-scale design** (needs D8). Revise the spec for a chiplet:
+  - Size it for production. Daniel considers the current 256 KiB per tile
+    and 2 MiB per cluster toy-scale. Interface limits stay fixed at
+    production size, and resource limits follow need.
+  - Replace PCIe, NVMe, 100 GbE and the display engine with the MegaPad
+    link, since MegaPad handles I/O and Desk handles the display.
+  - Decide where its memory lives: the chiplet's own HBM, or MegaPad's
+    memory (D8).
+  - Have MegaPad load and start the Lisp runtime over the link.
+  - Turn the GC and runtime-setup traps into real hardware controls.
+  - Answer two questions raised in March. Does LM1 get its own built-in
+    self-test, or does MegaPad run one for the whole package? Does LM1 adopt
+    MegaPad's hard QoS and one-instruction-per-cycle rule?
+  - Fix the spec's contradictions in §3.1 and §12.1.
 
-- Size it for production. Daniel considers the current 256 KiB per tile and
-  2 MiB per cluster toy-scale. Interface limits stay fixed at production
-  size, and resource limits follow need.
-- Replace PCIe, NVMe, 100 GbE and the display engine with the MegaPad link,
-  since MegaPad handles I/O and Desk handles the display.
-- Decide where its memory lives: the chiplet's own HBM, or MegaPad's memory
-  (D8).
-- Have MegaPad load and start the Lisp runtime over the link.
-- Turn the GC and runtime-setup traps into real hardware controls.
-- Answer two questions raised in March. Does LM1 get its own built-in
-  self-test, or does MegaPad run one for the whole package? Does LM1 adopt
-  MegaPad's hard QoS and one-instruction-per-cycle rule?
-- Fix the spec's contradictions in §3.1 and §12.1.
+  As with MegaPad, the RTL describes the chip we want. Fitting the FPGA is
+  not a gate.
+- **8c. The MegaPad link.** One spec covers doorbells and mailboxes, shared
+  memory windows and DMA, interrupts, loading and starting programs, errors,
+  reset and test access. Proposed: the spec lives in `lm1/` as the chiplet's
+  interface, and MegaPad implements the host side.
+- **8d. The chiplet module** (Decided). LM1's model is written in
+  accelerated C++ as a chiplet module that MegaPad's simulator imports
+  through Part 3d's interface, and it is built from `lm1/`. Proposed: the
+  Python emulator stays as the reference model, and differential tests hold
+  the two together.
+- **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
+  clusters and GC engines; only a single core is simulated today. Add
+  MegaPad's side of the link to its SoC.
+- **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
+  build the Lisp runtime image that MegaPad loads.
+- **8g. Verification.** Link conformance tests are shared by the chiplet
+  module, the Python reference and both RTL sides. Close the RTL test gaps
+  listed in `docs/test_gap_ideas.md`.
 
-As with MegaPad, the RTL describes the chip we want. Fitting the FPGA is not
-a gate.
-
-**7b. The MegaPad link.** One spec covers doorbells and mailboxes, shared
-memory windows and DMA, interrupts, loading and starting programs, errors,
-reset and test access. Proposed: the spec lives in `lm1/` as the chiplet's
-interface, and MegaPad implements the host side.
-
-**7c. A chiplet model for MegaPad's emulator and simulator.** The emulator
-accepts Python devices through `bus.register`. The native simulator
-hard-codes its device windows, so it first needs a general way to attach
-devices, which is MegaPad work. A native model will probably be needed for
-usable speed (inferred, not measured).
-
-**7d. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
-clusters and GC engines; only a single core is simulated today. Add
-MegaPad's side of the link to its SoC.
-
-**7e. Toolchain.** The assembler and compiler follow any ISA changes. They
-build the Lisp runtime image that MegaPad loads.
-
-**7f. Verification.** Link conformance tests are shared by the emulator
-model, the simulator model and both RTL sides. Close the RTL test gaps listed
-in `docs/test_gap_ideas.md`.
-
-Done when, in both the emulator and the simulator, MegaPad boots the chiplet
+Done when the simulator loads the chiplet module, MegaPad boots the chiplet
 over the link and runs Lisp work sent from KDOS, and both RTL sides pass the
 same link tests.
 
-### Part 8. LM1 in the system software
+### Part 9. LM1 in the system software
 
-Needs Part 4 and Parts 7b and 7c.
+Needs Part 5 and Parts 3d, 8c and 8d.
 
-- **8a.** MegaPad gets a system module for the chiplet, following
+- **9a.** MegaPad gets a system module for the chiplet, following
   `networking.f` and `rich-terminal.f`. MegaPad owns it, and system
   composition loads it at boot when the chiplet is present.
-- **8b.** Akashic gets a library that hands work to the chiplet through that
+- **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
-- **8c.** The Lisp Practice. A Lisp console applet talks to the chiplet's
+- **9c.** The Lisp Practice. A Lisp console applet talks to the chiplet's
   REPL, which `spec/06` places in the chiplet's own runtime along with the
   compiler. Pad holds programs, and examples come with it.
 
@@ -522,7 +590,7 @@ Done when the Lisp configuration's journey passes: evaluate expressions, run
 a program written in Pad, and see the results, all through Desk's normal
 path.
 
-### Part 9. Documentation
+### Part 10. Documentation
 
 The documents are written fresh for users. Component docs are sources of
 facts, but they aren't copied as they stand, since many mix reference
@@ -544,15 +612,14 @@ while writing:
 - the Python version;
 - the BIOS word count (481, 540 or 550);
 - the Desktop's memory (320 or 384 MiB);
-- the missing `rtl/README.md`;
-- LM1's test counts.
+- the missing `rtl/README.md`.
 
 D5 decides whether the component repositories' docs get the same treatment.
 
 Done when every shipped feature is documented by use and function, and no
 document talks about plans, phases, evidence or history.
 
-### Part 10. Qualification and release
+### Part 11. Qualification and release
 
 Needs every other part, plus D2, D4 and D6.
 
@@ -570,13 +637,16 @@ Needs every other part, plus D2, D4 and D6.
 
 ## 6. Order
 
-- Part 1 comes first. Parts 1c and 1d can run at the same time, since they
-  touch different repositories.
-- After Part 1, Parts 2, 3 and 4 proceed side by side. Part 7 starts after
-  Part 1c and runs alongside the rest.
-- Part 5 needs Parts 3 and 4. Part 6 needs Parts 1d, 2 and 4. Part 8 needs
-  Part 4 and Parts 7b and 7c.
-- Part 9 grows with every part and is finished before Part 10.
+- Part 1 comes first. Part 1c is done, 1d continues, and 1b waits on D1.
+- Three parts lead (Decided): Part 2 (ext4), Part 3 (the simulator) and
+  Part 8 (the LM1 chiplet). They proceed side by side, mostly in different
+  repositories: Part 2 in Akashic and MegaPad, Part 3 in MegaPad, and Part 8
+  in `lm1/`.
+- Parts 4 and 5 can proceed alongside them. Part 4's image builder moves
+  onto ext4 once Part 2 lands.
+- Part 6 needs Parts 4 and 5. Part 7 needs Parts 1d, 2 and 5. Part 9 needs
+  Part 5 and Parts 3d, 8c and 8d.
+- Part 10 grows with every part and is finished before Part 11.
 - Each part starts on Daniel's approval.
 
 ## 7. Working rules
