@@ -95,6 +95,9 @@ All were taken on 2026-10-27.
     Part 1g removes it from the tree, so neither the release nor future
     checkouts include it. History is purged only if the rights holder asks,
     because a purge would change every MegaPad commit ID since February.
+19. Microcores get all 32 registers, as the design implies and the emulator
+    already models. The RTL microcore, which has 16 and appears to ignore the
+    REX prefix's extension bit, is widened to match (Part 3e).
 
 ## 3. Open decisions
 
@@ -191,30 +194,6 @@ Each also needs a check of the real outside services it uses, such as the
 Agent's provider key and Streams' live feeds. Recommended: all six, since
 together they cover every applet and both new pieces. The names are working
 names. Blocks Part 6.
-
-**D11. The microcore register count.** MegaPad's full cores have 32
-registers. R0 to R15 fit in an instruction's register byte, and R16 to R31
-need a one-byte REX prefix. The design says microcores run the full-core ISA
-minus the 1802-heritage features, which implies 32, but the RTL microcore
-has 16. Microcores run only kernels: restricted Forth words with no
-dictionary, heap, I/O or exceptions, which keep their data stack in
-registers. The options:
-
-- 32 registers, so fewer kernels spill their stack to memory;
-- 16 registers, which takes less area on each of the twelve microcores and
-  keeps kernel code smaller, with no REX prefixes. That matters because
-  fetch traffic is a known microcore cost (`docs/microcore-kernels-plan.md`).
-  The registers that full cores reserve, R16, R17 and R19, are ones
-  microcores never need, since they don't run the BIOS's Forth.
-
-Either way, one defect needs fixing. From a reading of the RTL, not yet a
-test, the microcore accepts the REX prefix but ignores its high bit. An
-instruction naming R17 would then silently use R1. The emulator, meanwhile,
-gives microcores all 32 registers. Recommended: 16. Any instruction naming
-R16 to R31 then raises an illegal-instruction trap on a microcore, in the
-RTL, the emulator and the simulator alike, and the architecture and ISA
-references say so. Revisit only if measured kernels spill heavily. Blocks
-Part 3e.
 
 ## 4. Where things stand
 
@@ -508,8 +487,9 @@ and `docs/microcore-kernels-plan.md` record directions accepted on
 - Desk's screen path stays on one core, and extra cores take background
   work.
 
-The same documents name two open hardware gaps. The RTL microcore has 16
-registers where the design implies 32, and boot sets up no microcore stacks.
+The same documents name two hardware gaps. The RTL microcore has 16
+registers where microcores are specified with 32, and boot sets up no
+microcore stacks.
 
 - **3a. Multicore model.** The simulator models every full core, and then
   the clusters and their microcores. Its guest-visible results match the
@@ -527,8 +507,10 @@ registers where the design implies 32, and boot sets up no microcore stacks.
   endpoints, shared memory windows, interrupts, reset, and the module's place
   in the simulator's rounds. Proposed: the emulator loads the same modules,
   so both backends run the same chiplet model.
-- **3e. Microcore gaps.** The microcore register count (D11) and boot
-  stacks are settled before microcore simulation is built.
+- **3e. Microcore gaps.** Before microcore simulation is built, the RTL
+  microcore widens to 32 registers and decodes the REX prefix's extension
+  bits as the full core does, and boot gives microcores their stacks. A test
+  runs R16 to R31 on a microcore in both the RTL and the emulator.
 
 Done when:
 
