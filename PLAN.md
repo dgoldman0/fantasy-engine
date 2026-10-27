@@ -117,6 +117,9 @@ All were taken on 2026-10-27.
     It binds the material the work needs, sets what may act there and opens
     what the work calls for; it is not a preset of which applets are open.
     Sound Lab and Observatory are not configurations as they stand.
+26. The sample configurations are five Practices: Everyday, Workshop, Study
+    and Publishing in the alpha, and Investigation after it (Part 6). The
+    set can change later.
 
 ## 3. Open decisions
 
@@ -145,15 +148,6 @@ short sizing study as the first step of Part 8b, covering the Lisp work
 Leviathan's Practices give LM1, an area budget relative to MegaPad, and the
 bandwidth of each memory option. The study comes back with numbers before anything is chosen.
 Blocks Part 8b.
-
-**D9. Which configurations ship.** Each sample configuration is a Practice
-built around a task or subject (decision 25). Part 6 proposes five, four of
-them for the alpha. Each costs a Practice design, covering what it binds,
-what may act there and what opens, plus a scripted journey and its
-documentation, and each needs its real outside services checked.
-Recommended: Everyday, Workshop, Study and Publishing for the alpha, with
-Investigation after it, since it needs new parts. The names are working
-names. Blocks Part 6.
 
 ## 4. Where things stand
 
@@ -541,7 +535,7 @@ scheduled actions and sandboxed tools may do there, and opens what the work
 calls for. LM1 is part of the machine in all of them, and each Practice
 uses Lisp where its work calls for it.
 
-Proposed set (D9). The names are working names.
+The set (decision 26). The names are working names, and the set can change.
 
 - **Everyday.** Daily computing, the internet included: writing, documents
   and PDFs, files, plans and reminders, tables, Bluesky and news feeds, and
@@ -584,7 +578,8 @@ For each configuration:
    regression gate.
 4. Document it (Part 10).
 
-Done when every configuration runs from the command and passes its journey.
+Done when each of the first four runs from the command and passes its
+journey. Investigation follows the same steps after the alpha.
 
 ### Part 7. The System Practice
 
