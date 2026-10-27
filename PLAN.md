@@ -91,6 +91,10 @@ All were taken on 2026-10-27.
 17. LM1's Python emulator stays the reference model until the C++ chiplet
     module is complete. Because it may be wrong too, the spec is the referee
     between them (Part 8d).
+18. MegaPad's git history keeps `cdp1802.pdf`, a copy of RCA's 1802 manual.
+    Part 1g removes it from the tree, so neither the release nor future
+    checkouts include it. History is purged only if the rights holder asks,
+    because a purge would change every MegaPad commit ID since February.
 
 ## 3. Open decisions
 
@@ -187,25 +191,6 @@ Each also needs a check of the real outside services it uses, such as the
 Agent's provider key and Streams' live feeds. Recommended: all six, since
 together they cover every applet and both new pieces. The names are working
 names. Blocks Part 6.
-
-**D10. Whether to purge `cdp1802.pdf` from MegaPad's history.** The file is
-a 225 KB copy of RCA's 1802 manual, added on 2026-02-07. It is copyrighted,
-and nothing grants permission to share it. Part 1g removes it from the tree,
-so neither the release nor future checkouts include it. Git keeps it in
-history, though, so every clone of the public repository still carries a
-copy. The options:
-
-- leave history alone;
-- purge the file from history.
-
-Purging rewrites 1,415 of MegaPad's 1,422 commits, so every commit ID since
-February changes. That breaks the IDs cited in evidence notes, docs and
-`AGENTS.md`, and forces a rebase of all 33 branches that contain the file,
-work in progress included. It needs a force-push, and GitHub may keep the
-old commits reachable until its support team purges them. The repository
-has no forks, so the damage stays local. Recommended: leave history alone,
-and purge only if the rights holder asks. Removing the file from the tree
-is what keeps the release clean. Blocks nothing.
 
 **D11. The microcore register count.** MegaPad's full cores have 32
 registers. R0 to R15 fit in an instruction's register byte, and R16 to R31
@@ -423,7 +408,7 @@ and used.
    as fonts, images and binary fixtures. `reuse lint` runs with each
    repository's tests.
 2. `cdp1802.pdf`, RCA's 1802 manual, leaves MegaPad's tree, and the README
-   links to a public copy instead. D10 covers its history.
+   links to a public copy instead. Its history stays (decision 18).
 3. The generated Unicode tables carry the Unicode licence notice, and their
    generators write it: MegaPad's `rich_terminal/text_data.py` and Akashic's
    `akashic/text/unicode-tables.f`.
