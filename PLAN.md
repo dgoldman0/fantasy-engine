@@ -181,13 +181,13 @@ All were taken on 2026-10-27.
     authority only as capabilities, could compile to the sandbox's artifact
     format, while the sandbox's own source language stays as its
     documentation ratifies it.
-32. Work on the language starts once Part 9d is built, and the release
-    doesn't wait for it. The first step is a checker for 9d's rules alone,
-    because tracking refs through stack shuffles and quotations is untested
-    and may prove awkward; syntax waits for that checker. Until then, 9d's
-    rules are written precisely enough for a checker to enforce them. The
-    language stays small, Forth plus kinds, windows and placement, so that
-    it doesn't split the library across a third language.
+32. Work on the language starts once Part 9d is built. Whether the first
+    release waits for it is open (D12). The first step is a checker for 9d's
+    rules alone, because tracking refs through stack shuffles and quotations
+    is untested and may prove awkward; syntax waits for that checker. Until
+    then, 9d's rules are written precisely enough for a checker to enforce
+    them. The language stays small, Forth plus kinds, windows and placement,
+    so that it doesn't split the library across a third language.
 
 ## 3. Open decisions
 
@@ -220,6 +220,21 @@ Leviathan gives LM1, which is sandbox jobs and Desk's managed data
 much traffic the collector adds. It also sets an area budget relative to
 MegaPad and compares the bandwidth of each memory option. The study comes
 back with numbers before anything is chosen. Blocks Part 8b.
+
+**D12. Whether the first release waits for the language.** Decisions 30 to
+32 give Leviathan a language that spans both chips and start its work once
+Part 9d is built, beginning with a checker for 9d's rules. The release
+already waits for the LM1 chiplet (decision 3), and the language adds a
+second dependency on LM1's side. There are three options. The release can
+ship without the language, which keeps its scope as it stands and puts the
+language in a later release. It can wait for the checker alone, which then
+checks the managed-data rules in Akashic's Forth code and ships as a tool,
+while the language's syntax follows later. Or it can wait for a usable
+language, which gives the Workshop both chips in one program but holds the
+release on work whose hardest part, tracking refs through stack shuffles and
+quotations, is untested. Recommended: ship without waiting, and include the
+checker if it is ready in time, without making it a release requirement.
+Blocks nothing before Part 9d; it decides whether Part 11 waits.
 
 ## 4. Where things stand
 
