@@ -15,5 +15,5 @@ what the plan has already placed after the alpha.
   ([native-filesystem.md](native-filesystem.md)).
 - MediaLab, as SoundLab's possible growth, and the other directions in
   section 6 of [applet-concepts.md](applet-concepts.md).
-- The language (decisions 30 to 32), unless D12 brings it into the first
-  release ([language.md](language.md)).
+- The language (decisions 30 to 32 and 34), unless D12 brings it into the
+  first release ([language.md](language.md)).

@@ -21,7 +21,8 @@ that must stay private goes elsewhere.
 The topic files so far:
 
 - [language.md](ideas/language.md): Leviathan's language, which uses both
-  engines without naming either, beyond what decisions 30 to 32 settle.
+  engines without naming either, beyond what decisions 30 to 32 and 34
+  settle.
 - [use-cases.md](ideas/use-cases.md): what people might do with Fantasy
   Engine beyond the plan's Practices.
 - [release-scope.md](ideas/release-scope.md): what the first release should

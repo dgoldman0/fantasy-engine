@@ -1,10 +1,11 @@
 # The language
 
-Decisions 30 to 32 in [PLAN.md](../PLAN.md) settle that Leviathan gets a
-language of its own, what shape it takes, and when work on it starts. The
-language names what code needs, never a chip, and the toolchain decides
-where each task runs. D12 asks whether the first release waits for it. This
-file holds the thinking that is still open. Nothing here is decided.
+Decisions 30 to 32 and 34 in [PLAN.md](../PLAN.md) settle that Leviathan
+gets a language of its own, what shape it takes, that its quotations are
+ordinary lists, and when work on it starts. The language names what code
+needs, never a chip, and the toolchain decides where each task runs. D12
+asks whether the first release waits for it. This file holds the thinking
+that is still open. Nothing here is decided.
 
 ## A sketch
 
@@ -42,6 +43,20 @@ program says so. On a machine with one engine and a software collector, all
 of it would run there. No window or handle appears in the code, because the
 compiler inserts them (decision 31).
 
+Quotations are ordinary lists (decision 34), so the same code is also data:
+
+```forth
+3 [ DUP * ] CALL        \ runs the list: 9
+[ DUP * ] LENGTH        \ treats it as data: 2
+
+: adder  ( n -- quot )      [ + ] CONS ;   \ 5 adder gives [ 5 + ]
+: twice  ( quot -- quot )   DUP APPEND ;   \ [ 1 + ] twice gives [ 1 + 1 + ]
+```
+
+`adder` captures a value by putting it into the list, which does a
+closure's job. `twice` changes a program the way a Lisp macro does, working
+on a flat list of words.
+
 ## Prior art
 
 Each of these comes near part of what Leviathan needs, and none covers the
@@ -51,7 +66,7 @@ whole (decision 30). They are worth reading before the design goes further.
   dispatch and checked stack effects. Its optimizing compiler turns stack
   code into register code, which is what LM1, a 32-register machine, needs.
 - **Joy.** A functional stack language whose programs are lists, so code and
-  data share one form, as in Lisp.
+  data share one form, as in Lisp. Decision 34 adopts this.
 - **HP's RPL** (Reverse Polish Lisp). Typed objects on a stack, with an
   unchecked System RPL beneath a checked User RPL, over one collected memory.
 - **PostScript.** Typed objects on a stack. `save` and `restore` bound
@@ -97,8 +112,7 @@ whole (decision 30). They are worth reading before the design goes further.
 - **Tasks and their results.** The sketch's `TASK` takes a value and a
   quotation and returns at once, and Akashic already has futures
   (`docs/concurrency/future.md`). A result could be polled each frame or
-  handed to a quotation, which is then an object, since it outlives the word
-  that made it.
+  handed to a quotation that runs when the task ends.
 - **The machine description.** What it holds (the engines, which devices and
   kinds each serves, and what work costs on each), who writes it, and
   whether costs are declared or measured. Also whether a program may add
@@ -117,10 +131,13 @@ whole (decision 30). They are worth reading before the design goes further.
   so on Leviathan the compiler could be Lisp on LM1 that emits code for both
   engines, Forth on MegaPad, or both. Written in the language itself, it
   would be placed like any other program.
-- **What quotations capture.** A quotation that doesn't outlive its word
-  needs no allocation (decision 31). Forth 2012's `[: ;]` captures nothing;
-  the language could let such quotations capture values from the caller's
-  frame.
+- **What a word is as a value.** Lists hold words themselves, not their
+  names (decision 34), so a word needs an object form that every engine can
+  read, leading to its definition and to whatever code each engine has
+  compiled for it.
+- **Compiling lists.** Whether a list is compiled when it is made, when it
+  first runs, or when a task lands on an engine, and how long compiled code
+  is kept.
 - **Exact integers in plain data.** Integers are exact (decision 31), so a
   large one is an object. Whether plain-data code can hold integers, or only
   cells, is open.
@@ -133,11 +150,9 @@ whole (decision 30). They are worth reading before the design goes further.
   earlier one that differs only in case. The sandbox language is
   case-sensitive, with reserved words in uppercase. Words compiled to Forth
   inherit KDOS's rule.
-- **Lisp data in the source, and code as data.** How list literals and
-  symbols are written in a stack language, and whether macros are Lisp
-  macros or Forth immediate words. One direction is Joy's: quotations are
-  ordinary lists, so a program is data that Lisp-style code can build and
-  transform, while compiled words still run as Forth threads.
+- **Lisp data in the source.** How list literals and symbols are written in
+  a stack language, and whether macros are words that transform quotation
+  lists while compiling or Forth immediate words.
 - **Microcore kernels.** A microcore kernel is a word in a restricted Forth
   subset that works only in caller-owned buffers and may not allocate,
   perform I/O or throw (Akashic `docs/concurrency/microcore-kernels.md`).
@@ -148,6 +163,10 @@ whole (decision 30). They are worth reading before the design goes further.
   memory, holding authority only as capabilities, could compile to the
   sandbox's artifact format. Whether that is worth doing, while the
   sandbox's own source language stays, is open.
+- **Sandboxed code and built lists.** Whether sandboxed code may run lists
+  it builds is open (decision 34). The sandbox's source language never
+  evaluates anything, so one answer is that sandboxed code may build lists
+  and hand them on but never run them.
 
 ## The first step
 

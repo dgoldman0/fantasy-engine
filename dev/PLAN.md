@@ -187,14 +187,13 @@ All were taken on 2026-10-27.
     Objects, such as records, lists and strings, are collected. The compiler
     inserts Part 9d's windows and handles itself, while hand-written Forth
     keeps to 9d's rules by hand; whether that insertion works well is
-    untested. Cells wrap at 64 bits, and integers are exact. A quotation
-    that doesn't outlive the word that made it needs no allocation, and one
-    that does, such as a task's, is an object. Authority reaches code as
-    capability values passed to it; where that rule meets Akashic's existing
-    words, which reach devices directly, is open (`dev/ideas/language.md`).
-    Code that uses no plain memory and holds authority only as capabilities
-    could compile to the sandbox's artifact format, while the sandbox's own
-    source language stays as its documentation ratifies it.
+    untested. Cells wrap at 64 bits, and integers are exact. Quotations are
+    ordinary lists (decision 34). Authority reaches code as capability
+    values passed to it; where that rule meets Akashic's existing words,
+    which reach devices directly, is open (`dev/ideas/language.md`). Code
+    that uses no plain memory and holds authority only as capabilities could
+    compile to the sandbox's artifact format, while the sandbox's own source
+    language stays as its documentation ratifies it.
 32. Work on the language starts once Part 9d is built. Whether the first
     release waits for it is open (D12). The first step is a checker for 9d's
     rules alone, because tracking refs through stack shuffles and quotations
@@ -212,6 +211,26 @@ All were taken on 2026-10-27.
     that branch, so main keeps `dev/` for the next release. The repository
     is public, so everything in `dev/` is public once pushed, and material
     that must stay private goes elsewhere.
+34. The language's quotations are ordinary lists of words and values, as in
+    Joy, so programs are data. A quotation can be run, and it can be taken
+    apart or built with the same words as any other list, so code that
+    writes code is list work, and a quotation captures a value by holding it
+    rather than through closure machinery. These are the lists Lisp code
+    uses (decision 30), so Lisp code can build or read programs in the
+    language. A task, being a quotation and its inputs, is an object that
+    any engine can receive, and whichever engine the job service picks
+    compiles it for itself (decision 31).
+
+    A quotation can't change once it is made, so new code means a new list,
+    and the compiled code cached for each list stays valid. A list holds the
+    words themselves rather than their names, so a later definition can't
+    silently change what an existing list does, which KDOS's
+    case-insensitive names would otherwise make easy. Literal quotations are
+    built once, when their word is compiled, and only quotations built while
+    a program runs are allocated. Running a built list is like Forth's
+    EVALUATE, so built code passes the same kind checks and authority rules
+    as any other code. Whether sandboxed code may run lists it builds is
+    open.
 
 ## 3. Open decisions
 
@@ -246,17 +265,17 @@ MegaPad and compares the bandwidth of each memory option. The study comes
 back with numbers before anything is chosen. Blocks Part 8b.
 
 **D12. Whether the first release waits for the language.** Decisions 30 to
-32 give Leviathan a language that uses both of its engines without naming
-either, and start its work once Part 9d is built, beginning with a checker
-for 9d's rules. The release already waits for the LM1 chiplet (decision 3),
-and the language adds a second dependency on LM1's side. There are three
-options. The release can ship without the language, which keeps its scope as
-it stands and puts the language in a later release. It can wait for the
-checker alone, which then checks the managed-data rules in Akashic's Forth
-code and ships as a tool, while the language's syntax follows later. Or it
-can wait for a usable language, which gives the Workshop both engines in one
-program but holds the release on work whose hardest part, tracking refs
-through stack shuffles and quotations, is untested. Recommended: ship
+32 and 34 give Leviathan a language that uses both of its engines without
+naming either, and start its work once Part 9d is built, beginning with a
+checker for 9d's rules. The release already waits for the LM1 chiplet
+(decision 3), and the language adds a second dependency on LM1's side. There
+are three options. The release can ship without the language, which keeps
+its scope as it stands and puts the language in a later release. It can wait
+for the checker alone, which then checks the managed-data rules in Akashic's
+Forth code and ships as a tool, while the language's syntax follows later.
+Or it can wait for a usable language, which gives the Workshop both engines
+in one program but holds the release on work whose hardest part, tracking
+refs through stack shuffles and quotations, is untested. Recommended: ship
 without waiting, and include the checker if it is ready in time, without
 making it a release requirement. Blocks nothing before Part 9d; it decides
 whether Part 11 waits.
