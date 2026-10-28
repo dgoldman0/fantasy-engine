@@ -3,9 +3,10 @@
 Decisions 30 to 32 and 34 in [PLAN.md](../PLAN.md) settle that Leviathan
 gets a language of its own, what shape it takes, that its quotations are
 ordinary lists, and when work on it starts. The language names what code
-needs, never a chip, and the toolchain decides where each task runs. D12
-asks whether the first release waits for it. This file holds the thinking
-that is still open. Nothing here is decided.
+needs, never a chip, and the toolchain decides where each task runs. The
+release never waits for it, and D12 decides whether Study's concept map is
+written in it. This file holds the thinking that is still open. Nothing here
+is decided.
 
 ## A sketch
 
@@ -127,10 +128,11 @@ whole (decision 30). They are worth reading before the design goes further.
 - **Authority and Akashic's words.** Authority reaches code as capability
   values (decision 31), but Akashic's existing words reach devices directly.
   Where that boundary sits is open.
-- **Where the compiler runs.** LM1 is in every configuration (decision 24),
-  so on Leviathan the compiler could be Lisp on LM1 that emits code for both
-  engines, Forth on MegaPad, or both. Written in the language itself, it
-  would be placed like any other program.
+- **Where the compiler runs.** The first version runs in the image builder
+  on the host and emits Forth source (decision 32). Running lists built
+  while a program runs needs a compiler on the machine as well. On Leviathan
+  that could be Lisp on LM1, Forth on MegaPad, or the language itself,
+  placed like any other program.
 - **What a word is as a value.** Lists hold words themselves, not their
   names (decision 34), so a word needs an object form that every engine can
   read, leading to its definition and to whatever code each engine has
@@ -170,13 +172,15 @@ whole (decision 30). They are worth reading before the design goes further.
 
 ## The first step
 
-Decision 32 starts with a checker for Part 9d's rules, before any syntax.
-Tracking kinds through stack shuffles and quotations is the hard part, and
-the same tracking is what lets the compiler insert windows and handles
-(decision 31). The checker needs 9d's rules in a form it can test: which
-words open and close a window, which words write managed objects, and which
-words make and release handles. Its first real input could be the Forth code
-that uses managed data, beginning with Study's concept map.
+Decision 32 starts with the checker when release work begins, before any
+syntax. Its core tracks kinds through stack shuffles and the return stack,
+needs nothing from LM1, and is tried first on existing Akashic code. The
+same tracking lets the compiler insert windows and handles (decision 31),
+which needs 9d's rules in a form it can test: which words open and close a
+window, which words write managed objects, and which words make and release
+handles. Study's concept map is the first managed-data code it would handle,
+and D12 decides, once 9d's rules are specified, whether that map is written
+in the language.
 
 ## In the Workshop
 

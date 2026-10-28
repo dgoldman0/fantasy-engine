@@ -195,15 +195,29 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     that uses no plain memory and holds authority only as capabilities could
     compile to the sandbox's artifact format, while the sandbox's own source
     language stays as its documentation ratifies it.
-32. Work on the language starts once Part 9d is built. Whether the first
-    release waits for it is open (D12). The first step is a checker for 9d's
-    rules alone, because tracking refs through stack shuffles and quotations
-    is untested and may prove awkward. The same tracking is what lets the
-    compiler insert windows and handles (decision 31), so syntax waits for
-    that checker. Until then, 9d's rules are written precisely enough for a
-    checker to enforce them. The language stays small, Forth plus kinds,
-    objects, capabilities and tasks, so that it doesn't split the library
-    across a third language.
+32. Work on the language starts with the checker when release work begins,
+    and the language grows alongside Parts 2, 3 and 8 without being one of
+    the leading items (decision 10). Its first version is small. The
+    checker's core tracks kinds through stack shuffles and the return stack
+    and needs nothing from LM1, so it is built first and tried on existing
+    Akashic code, because tracking refs through shuffles and quotations is
+    the part most likely to prove awkward; syntax waits for it. The compiler
+    emits Forth source, which KDOS loads like any other, and it runs in the
+    image builder on the host. The toolchain places everything on MegaPad,
+    with LM1 only collecting through 9d's library, so an LM1 backend, tasks
+    on LM1, and running lists built while a program runs come after the
+    release.
+
+    The object side follows once 9d's window and handle rules are specified,
+    since the compiler inserts them, and those rules depend on the link
+    specification in Part 8. Until then, 9d's rules are written precisely
+    enough for a checker to enforce them. The release never waits for the
+    language. Whether Study's concept map, the release's first managed-data
+    component, is written in it is decided when those rules are specified
+    (D12). The subset the release uses is frozen, so later changes to the
+    language don't force changes to release code. The language stays small,
+    Forth plus kinds, objects, capabilities and tasks, so that it doesn't
+    split the library across a third language.
 33. All of this repository's development material lives in `dev/`: this
     plan, ideas still being worked out, and notes for later releases. An
     idea is worked out in `dev/ideas/` until it is decided, then moves into
@@ -289,21 +303,17 @@ much traffic the collector adds. It also sets an area budget relative to
 MegaPad and compares the bandwidth of each memory option. The study comes
 back with numbers before anything is chosen. Blocks Part 8b.
 
-**D12. Whether the first release waits for the language.** Decisions 30 to
-32 and 34 give Leviathan a language that uses both of its engines without
-naming either, and start its work once Part 9d is built, beginning with a
-checker for 9d's rules. The release already waits for the LM1 chiplet
-(decision 3), and the language adds a second dependency on LM1's side. There
-are three options. The release can ship without the language, which keeps
-its scope as it stands and puts the language in a later release. It can wait
-for the checker alone, which then checks the managed-data rules in Akashic's
-Forth code and ships as a tool, while the language's syntax follows later.
-Or it can wait for a usable language, which gives the Workshop both engines
-in one program but holds the release on work whose hardest part, tracking
-refs through stack shuffles and quotations, is untested. Recommended: ship
-without waiting, and include the checker if it is ready in time, without
-making it a release requirement. Blocks nothing before Part 9d; it decides
-whether Part 11 waits.
+**D12. Whether Study's concept map is written in the language.** The concept
+map is the release's first managed-data component (Part 9d), and the
+language's first version is built alongside Parts 2, 3 and 8 (decision 32).
+The choice is made when 9d's window and handle rules are specified. If the
+language can then compile the concept map, with the compiler inserting the
+windows and handles, the map is written in it: the map is written once, and
+the compiler rather than hand-written Forth keeps 9d's rules. If not, the
+map is written in Forth under 9d's rules. The release doesn't wait for the
+language either way. Recommended: decide on evidence, namely the checker
+working on existing Akashic code and the compiler handling a draft of the
+concept map's code. Blocks the concept map's implementation in Part 9d.
 
 ## 4. Where things stand
 
@@ -877,7 +887,8 @@ LM1's side is written, and the Lisp console is a learning tool.
   they are. Study's concept map is the first user, and Investigation's graph
   follows after the alpha. Feeds, records and documents move over as applets
   need them. The rules are written precisely enough for a checker to enforce
-  them (decision 32).
+  them (decision 32). Whether the concept map is written in the language or
+  in Forth is decided when these rules are specified (D12).
 - **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds
@@ -966,6 +977,10 @@ or before a chip is made, a lawyer reviews the licensing.
   in `lm1/`.
 - Parts 4 and 5 can proceed alongside them. Part 4's image builder moves
   onto ext4 once Part 2 lands.
+- The language (decision 32) starts with the checker when release work
+  begins and proceeds alongside the three leading parts, without being one
+  of them. Whether Study's concept map uses it is decided when 9d's rules
+  are specified (D12).
 - Part 6 needs Parts 4 and 5. Part 7 needs Parts 1d, 2 and 5. Part 9 needs
   Part 5 and Parts 3d, 8c and 8d.
 - Within Part 9, the sandbox (9c) comes first, since it needs only jobs
