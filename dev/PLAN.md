@@ -148,49 +148,62 @@ All were taken on 2026-10-27.
     A hand-off would cost about the same on one die, and moving LM1 onto
     MegaPad's die wouldn't change the collector's limit either
     (decision 28), so LM1 stays a chiplet.
-30. Leviathan gets a language of its own that spans both chips. Existing
-    languages each assume one kind of memory. Lisp, Factor, Joy, Erlang and
-    Pony let a collector own every value, stacks included, while Forth has
-    no managed values at all. The nearest exceptions each miss part of it:
-    PreScheme compiles its manual level ahead of time, so the two never mix
-    at run time; Rust tracks lifetimes precisely but has no collected side;
-    and HP's RPL ran its two levels over one collected memory on one chip.
-    WebAssembly with garbage collection has decision 28's split, raw memory
-    plus managed references kept there only as handles, but it is a compile
-    target rather than a language people write. None treats two instruction
-    sets as one program.
-    The language is new rather than a derivative. Factor comes closest, but
-    its libraries need Factor's VM, and what would change (one collected
-    heap, a tagged stack, open authority) is its core, so a derivative would
-    keep only its look. The compatibility that matters is with Akashic's
-    Forth and LM1's Lisp data: the language's raw side is Forth itself, so
-    Akashic's words are its library as they stand, and Lisp lists written in
-    it are LM1 lists.
-31. The language's shape is set. Words carry checked stack effects, as
-    Factor's do, written as Forth's stack comments with kinds added: cell,
-    span (memory the caller provides and bounds), ref, handle, and LM1's
-    typed values. New raw words compile to ordinary Forth words that any
-    Forth code can call. A window is syntax. Inside one, refs can be
-    followed freely; the checker refuses a ref that would leave it, a keep
-    word turns a ref into a handle tied to an owner, and writes to managed
-    objects compile to the library's barrier words, so Part 9d's rules
-    become compile errors rather than conventions. Cells wrap at 64 bits,
-    and integers are exact. Quotations on the raw side can't outlive the
-    word that made them, since an escaping closure needs allocation;
-    escaping closures are LM1 closures. Each word or module names the chip
-    it runs on, and a call across chips is an explicit job sent through the
-    job service, whose result arrives later. Managed words get authority
-    only as values passed to them. The subset with no raw memory, holding
-    authority only as capabilities, could compile to the sandbox's artifact
-    format, while the sandbox's own source language stays as its
-    documentation ratifies it.
+30. Leviathan gets a language of its own. Its meaning covers both plain data
+    and collected objects, so it uses both of Leviathan's engines natively
+    without naming either (decision 31). Existing languages each assume one
+    kind of memory. Lisp, Factor, Joy, Erlang and Pony let a collector own
+    every value, stacks included, while Forth has no managed values at all.
+    The nearest exceptions each miss part of it: PreScheme compiles its
+    manual level ahead of time, so the two never mix at run time; Rust
+    tracks lifetimes precisely but has no collected side; and HP's RPL ran
+    its two levels over one collected memory on one chip. WebAssembly with
+    garbage collection has decision 28's split, raw memory plus managed
+    references kept there only as handles, but it is a compile target rather
+    than a language people write. None treats two instruction sets as one
+    program. The language is new rather than a derivative. Factor comes
+    closest, but its libraries need Factor's VM, and what would change (one
+    collected heap, a tagged stack, open authority) is its core, so a
+    derivative would keep only its look. The compatibility that matters is
+    with Akashic's Forth and with Lisp's data: the language's plain-data
+    side is Forth itself, so Akashic's words are its library as they stand,
+    and its lists are the lists Lisp code uses, so data passes between them
+    unchanged.
+31. The language names what code needs and never names a chip, and where
+    code runs never changes what it means. It names plain data, objects,
+    capabilities and tasks, a task being work whose result comes later. Work
+    moves between engines only as whole tasks, which the program marks, so
+    no call hides a hand-off. A machine description outside the program says
+    which engines a machine has and what each does well, and the compiler
+    and job service place each task from it: a task that calls device words
+    runs where the device is, and object-heavy work goes where objects are
+    cheap. On Leviathan, a word placed on MegaPad compiles to an ordinary
+    Forth word that any Forth code can call, and a word placed on LM1
+    compiles to LM1 code. On a machine with one engine and a software
+    collector, all of it runs there.
+
+    Words carry checked stack effects, as Factor's do, written as Forth's
+    stack comments, and their kinds describe data. Plain data, such as cells
+    and spans (memory the caller provides and bounds), is managed by hand.
+    Objects, such as records, lists and strings, are collected. The compiler
+    inserts Part 9d's windows and handles itself, while hand-written Forth
+    keeps to 9d's rules by hand; whether that insertion works well is
+    untested. Cells wrap at 64 bits, and integers are exact. A quotation
+    that doesn't outlive the word that made it needs no allocation, and one
+    that does, such as a task's, is an object. Authority reaches code as
+    capability values passed to it; where that rule meets Akashic's existing
+    words, which reach devices directly, is open (`dev/ideas/language.md`).
+    Code that uses no plain memory and holds authority only as capabilities
+    could compile to the sandbox's artifact format, while the sandbox's own
+    source language stays as its documentation ratifies it.
 32. Work on the language starts once Part 9d is built. Whether the first
     release waits for it is open (D12). The first step is a checker for 9d's
     rules alone, because tracking refs through stack shuffles and quotations
-    is untested and may prove awkward; syntax waits for that checker. Until
-    then, 9d's rules are written precisely enough for a checker to enforce
-    them. The language stays small, Forth plus kinds, windows and placement,
-    so that it doesn't split the library across a third language.
+    is untested and may prove awkward. The same tracking is what lets the
+    compiler insert windows and handles (decision 31), so syntax waits for
+    that checker. Until then, 9d's rules are written precisely enough for a
+    checker to enforce them. The language stays small, Forth plus kinds,
+    objects, capabilities and tasks, so that it doesn't split the library
+    across a third language.
 33. All of this repository's development material lives in `dev/`: this
     plan, ideas still being worked out, and notes for later releases. An
     idea is worked out in `dev/ideas/` until it is decided, then moves into
@@ -233,19 +246,20 @@ MegaPad and compares the bandwidth of each memory option. The study comes
 back with numbers before anything is chosen. Blocks Part 8b.
 
 **D12. Whether the first release waits for the language.** Decisions 30 to
-32 give Leviathan a language that spans both chips and start its work once
-Part 9d is built, beginning with a checker for 9d's rules. The release
-already waits for the LM1 chiplet (decision 3), and the language adds a
-second dependency on LM1's side. There are three options. The release can
-ship without the language, which keeps its scope as it stands and puts the
-language in a later release. It can wait for the checker alone, which then
-checks the managed-data rules in Akashic's Forth code and ships as a tool,
-while the language's syntax follows later. Or it can wait for a usable
-language, which gives the Workshop both chips in one program but holds the
-release on work whose hardest part, tracking refs through stack shuffles and
-quotations, is untested. Recommended: ship without waiting, and include the
-checker if it is ready in time, without making it a release requirement.
-Blocks nothing before Part 9d; it decides whether Part 11 waits.
+32 give Leviathan a language that uses both of its engines without naming
+either, and start its work once Part 9d is built, beginning with a checker
+for 9d's rules. The release already waits for the LM1 chiplet (decision 3),
+and the language adds a second dependency on LM1's side. There are three
+options. The release can ship without the language, which keeps its scope as
+it stands and puts the language in a later release. It can wait for the
+checker alone, which then checks the managed-data rules in Akashic's Forth
+code and ships as a tool, while the language's syntax follows later. Or it
+can wait for a usable language, which gives the Workshop both engines in one
+program but holds the release on work whose hardest part, tracking refs
+through stack shuffles and quotations, is untested. Recommended: ship
+without waiting, and include the checker if it is ready in time, without
+making it a release requirement. Blocks nothing before Part 9d; it decides
+whether Part 11 waits.
 
 ## 4. Where things stand
 

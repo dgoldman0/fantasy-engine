@@ -7,8 +7,8 @@ Nothing here is decided.
 
 ## Questions the plan already holds open
 
-- Whether the release waits for the two-chip language (D12), whose thinking
-  is in [language.md](language.md).
+- Whether the release waits for the language (D12), whose thinking is in
+  [language.md](language.md).
 - Whether MegaPad's and LM1's hardware designs ship with it, at the same
   recorded commits as the software (Section 1, Proposed).
 - Everything about running it on a Linux PC beyond the platform itself, such
