@@ -14,6 +14,3 @@ Nothing here is decided.
 - Everything about running it on a Linux PC beyond the platform itself, such
   as the rich-terminal viewer and the emulator as a second backend
   (Section 1, Proposed).
-- Whether Sound Lab and Observatory ship as applets. That follows from the
-  library inventory (Part 1d); neither is a configuration as it stands
-  (decision 25).

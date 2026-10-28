@@ -8,6 +8,8 @@ what the plan has already placed after the alpha.
 - Investigation, the fifth Practice (decision 26, Part 6 of
   [PLAN.md](../PLAN.md)).
 - macOS (decision 23).
+- Sound Lab, Worlds and Observatory, along with audio output and the
+  rich-terminal series path (decision 35).
 
 ## Directions recorded in other idea files
 

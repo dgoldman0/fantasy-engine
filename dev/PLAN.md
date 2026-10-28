@@ -56,7 +56,8 @@ made.
 
 ## 2. Decisions taken
 
-All were taken on 2026-10-27.
+All were taken on 2026-10-27, except decisions 35 and 36, taken on
+2026-10-28.
 
 1. fantasy-engine is the release repository. It sits beside `megapad/`,
    `akashic/` and `lm1/` in the workspace.
@@ -231,6 +232,30 @@ All were taken on 2026-10-27.
     EVALUATE, so built code passes the same kind checks and authority rules
     as any other code. Whether sandboxed code may run lists it builds is
     open.
+35. Sound Lab, Worlds and Observatory are not in the first release, and
+    neither are audio output and the rich-terminal series path, which those
+    applets exercise. Their tests leave the release's tests once release
+    work starts; until then, current work keeps its gate as it stands.
+    Desk's launcher stays. Other journeys already open applets through it,
+    an installed applet and Pad in one, Daybook and Streams in another, so
+    nothing replaces Sound Lab in the canonical Desktop journey unless a
+    need appears. When release work starts, that journey drops its Sound Lab
+    stages, and the workspace AGENTS.md's description of the gate changes
+    with it.
+36. A test runs only when something that can affect its result has changed.
+    Its key hashes the files `build_image` puts on its disk image, by name
+    and contents rather than as raw image bytes, so that times or other
+    varying data in an image can't defeat the match; the Python modules the
+    harness imported, read from `sys.modules`; its fixture folders; its
+    settings, with PYTHONHASHSEED pinned; and MegaPad's tree as one input. A
+    test whose key matches a passing run is skipped and reported as
+    unchanged since that run. A test bounded by a wall-clock watchdog always
+    runs, because host load can change its result. A full run before each
+    merge and each release checks the selection, and any result the
+    selection failed to predict counts as a missed input, fixed in the key.
+    Inputs are read from what the tools already know, never declared by
+    hand, because a stale declaration silently skips a test that would have
+    failed (Part 1h).
 
 ## 3. Open decisions
 
@@ -487,6 +512,13 @@ and used.
    metadata line is replaced.
 
 Done when `reuse lint` passes in every repository.
+**1h. Test selection** (Decided; timing Proposed). Build decision 36's
+selection into the harness: compute each test's key, record the keys of
+passing runs, skip tests whose keys match, and report every skipped test
+with the run it relies on, so evidence notes cite what actually ran. First
+check whether `build_image` gives identical output for identical inputs,
+then measure how many tests a typical slice skips. Proposed: build it early
+in release work, since every later part's testing uses it.
 
 ### Part 2. Storage: ext4
 
@@ -698,8 +730,8 @@ The set (decision 26). The names are working names, and the set can change.
   evidence. It needs new parts, an evidence store and the graph, so it is
   the largest.
 
-Sound Lab and Observatory are not configurations as they stand; whether
-they ship as applets follows from the inventory (Part 1d).
+Sound Lab, Worlds and Observatory don't ship in the first release
+(decision 35).
 
 For each configuration:
 
