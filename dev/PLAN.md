@@ -384,8 +384,8 @@ updated for the work done since.
 
 - The applets are Desk, Pad, File Explorer, Daybook, Grid, Agent, Sound
   Lab, Streams, Library, Observatory and Worlds. The canonical Desktop opens
-  Pad, Explorer, Daybook, Grid and Agent, and offers Sound Lab and Streams as
-  built-ins. It doesn't load Library, Observatory or Worlds. There is no
+  Pad, Explorer, Daybook, Grid and Agent, and offers Streams as a built-in.
+  It doesn't load Library, Sound Lab, Observatory or Worlds. There is no
   Forth console applet.
 - Only the test harness builds images: `local_testing/akashic_tui.py`
   (37,370 lines, 160 profiles). A profile's roots expand to their REQUIRE
@@ -603,13 +603,18 @@ the key records.
 
 Steps 2 and 3 are built in `fantasy_engine.testing` (commit 43ab1a9), and
 step 4 covers every test file of MegaPad, Akashic and this repository and
-every LM1 batch: 323, 543, 2 and 39 units. Decision 35's 34 units form the
+every LM1 batch: 323, 544, 2 and 39 units. Decision 35's 35 units form the
 `outside` set, MegaPad's system test the `final` set that the release's
 final run adds, and the remaining 872 units the `release` set that runs
-with each change. The standalone journeys aren't units yet: the physical
-driver runs `git` to bind its evidence to the trees, and a unit that starts
-a program other than Python always runs, so the journeys need a way to
-keep that binding out of their keys. Two writes per MegaPad invocation came
+with each change. Akashic's canonical Desktop no longer composes Sound Lab
+(Akashic bb0b327b), and its journey runs Sound Lab's stages only when the
+Desktop does; the checks of Desk with Sound Lab or Observatory alone moved
+into a test file of their own in the `outside` set. Step 6 is done: Section
+7 and the workspace AGENTS.md now send tests through the selection. The
+standalone journeys aren't units yet: the physical driver runs `git` to
+bind its evidence to the trees, and a unit that starts a program other
+than Python always runs, so the journeys need a way to keep that binding
+out of their keys. Two writes per MegaPad invocation came
 to light:
 the Makefile's accelerator step copies its 3 MB library into place even
 when nothing changed, and pytest's cache plugin rewrote a 1.1 MB file of
@@ -632,8 +637,8 @@ ext4, and its staged write mode is a preview limited to 1 KiB blocks and
 256-byte inodes. The image builder and the boot path handle MP64FS only.
 MegaPad's storage controller takes 32-bit sector numbers, and
 `docs/block-volume-contract.md` adds MBR and GPT volumes. Frames-follow-change
-part 4 added a read-only settings volume on a second storage controller; that
-work is on its branch and not yet merged.
+part 4 added a read-only settings volume on a second storage controller,
+which landed on both main branches on 2026-11-01.
 
 "Reasonable" means what an alpha tester needs, done well (Decided):
 
@@ -1103,9 +1108,12 @@ The workspace `AGENTS.md` governs this work. In short:
   an assistant is credited only by a Co-Authored-By trailer. Never amend a
   commit; add a new one. The maintainer pushes.
 - Test narrowly while working: unit and focused tests, then Desk with only
-  the applets a change touches. The physical Desktop journey is the
-  regression gate. It runs once, at the end of a slice that touches the rich
-  path, the simulator or Desk.
+  the applets a change touches. Tests run through the selection (Part 1h):
+  at a slice's end, the units already on record run with the tests the
+  slice's changes reach, and each is skipped when nothing it reads has
+  changed. The physical Desktop journey is the regression gate. It runs
+  once, at the end of a slice that touches the rich path, the simulator or
+  Desk.
 - Run heavy tests one at a time, within the 900-second and 3.5 GiB guards,
   and send throwaway output to `/dev/shm`.
 - Retire old work with an annotated `archive/` tag, then remove it. Don't

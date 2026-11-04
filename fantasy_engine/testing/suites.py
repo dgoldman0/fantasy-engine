@@ -29,6 +29,7 @@ OUTSIDE_RELEASE: frozenset[str] = frozenset((
     "akashic:local_testing/test_soundlab_prompt_restore.py",
     "akashic:local_testing/test_soundlab_waveform.py",
     "akashic:local_testing/test_observatory_worlds_slice.py",
+    "akashic:local_testing/test_rich_terminal_soundlab_observatory_journeys.py",
     # the series path
     "akashic:local_testing/test_data_graphics_series.py",
     "akashic:local_testing/test_rich_field_series_reuse.py",
