@@ -578,6 +578,31 @@ Done when every repository's tests run through the tool, a slice's run
 skips the tests whose inputs the slice didn't change, and a full run finds
 no result the selection failed to predict.
 
+Progress on 2026-11-03. Step 1 is done. Built three times, twice with
+PYTHONHASHSEED 0 and once with another seed, the pad, daybook, desktop and
+rich desktop images held the same files, contents and layout every time.
+Only MP64FS's per-entry time stamps differed, and no guest code reads them:
+KDOS defines `DE.MTIME`, and nothing calls it. The guest clock is the one
+input found that the recording can't see. Emulator runs from the harness
+start it at zero or at the fixed sample date, but runs through the
+simulator server, the physical journeys' path, start it at the host's
+current time and tie its uptime to the host's monotonic clock, and Daybook,
+the Agent's dispatch, mandates and Streams read it. Proposed: test runs
+through the server pass a fixed start time, so their dates become a setting
+the key records.
+
+Steps 2 and 3 are built in `fantasy_engine.testing` (commit 43ab1a9), and
+step 4 covers every test file of MegaPad, Akashic and this repository and
+every LM1 batch: 323, 543, 2 and 39 units. The standalone journeys aren't
+units yet, and the set of decision 35's tests waits on the tests that also
+exercise shipped code. Two writes per MegaPad invocation came to light:
+the Makefile's accelerator step copies its 3 MB library into place even
+when nothing changed, and pytest's cache plugin rewrote a 1.1 MB file of
+test IDs. The tool builds the accelerator once per run and turns the cache
+off, which brings a MegaPad unit from about 4.5 MB of writes to about
+0.2 MB. Proposed: MegaPad's `accel` target writes nothing when the library
+is current, which removes the remaining copy from every test target.
+
 ### Part 2. Storage: ext4
 
 One of the three leading items (Decided): reasonable ext4 support, not
