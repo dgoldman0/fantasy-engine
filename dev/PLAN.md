@@ -654,11 +654,24 @@ which landed on both main branches on 2026-11-01.
 Images are standard ext4, which host tools (e2fsprogs) can build and check.
 Akashic's writer already creates, deletes and renames files and folders,
 makes links, truncates, and grows files, each only in bounded cases. For the
-alpha it closes two gaps: general allocation, meaning growing and shrinking
-beyond those cases, and renaming over an existing file, which is the usual
-safe way to save. It keeps 1 KiB blocks, which are legal ext4 and fine at
-these sizes. Symlinks, extended attributes, permissions, quotas, encryption
-and online resizing wait.
+alpha it closes the gaps those cases leave (Decided, 2026-11-04). The first
+is general allocation, meaning growing and shrinking files beyond them. The
+second is renaming over an existing file, which is the usual safe way to
+save. The third is folders, since the standard names renaming and folders of
+a few hundred entries. Today, making a folder or a link, or renaming into a
+full directory block, fails; a folder can be removed only while it has never
+grown past one block; a folder cannot be renamed within its parent, nor moved
+unless it is empty; and in an indexed folder the first name in each block
+cannot be deleted. The writer keeps 1 KiB blocks, which are legal ext4 and
+fine at these sizes. Symlinks, extended attributes, permissions, quotas,
+encryption and online resizing wait.
+
+Each family of operations closes its gaps through one general routine, and
+the bounded cases it replaces are deleted rather than kept beside it
+(Decided, 2026-11-04). That means one extent tree of any depth, one block
+allocator, and one directory insert that create, mkdir, link and rename
+share. Code and tests that already pass get reworked, and the writer ends
+with less code and no gaps between cases.
 
 Proposed: every configuration boots with three volumes.
 
@@ -679,8 +692,8 @@ loads before it can mount ext4.
 Steps:
 
 1. Settle the boot path. Done: a small MP64FS boot volume.
-2. Close the writer's two alpha gaps: general allocation, and renaming over
-   an existing file.
+2. Close the writer's alpha gaps: general allocation, renaming over an
+   existing file, and folders.
 3. Teach KDOS to load modules from ext4 volumes.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
@@ -707,14 +720,6 @@ reads. The rest follows from the per-write design: each checkpoint
 reauthenticates the whole mount three times, each write walks every other
 inode's map, both grow with the volume rather than the write, and each block
 is its own transaction.
-
-The writer's bounded cases also leave folders short of everyday use, beyond
-the two gaps above. Making a folder or a link, or renaming into a full
-directory block, fails; a folder can be removed only while it has never grown
-past one block; a folder cannot be renamed within its parent, nor moved
-unless it is empty; and in an indexed folder the first name in each block
-cannot be deleted. Proposed: step 2 closes these too, since the standard
-names renaming and folders of a few hundred entries.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
