@@ -249,19 +249,24 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     as any other code. Whether sandboxed code may run lists it builds is
     open.
 35. Sound Lab, Worlds and Observatory are not in the first release, and
-    neither are audio output and the rich-terminal series path, which those
-    applets exercise. Their tests stay in their repositories and run on
-    request, but they leave the regression gate and the full runs of
-    decision 36. The canonical Desktop stops loading Sound Lab as a
-    built-in, so none of its code sits on the gate's image; Desk runs it,
-    as it runs Observatory, outside the Desktop. Desk's launcher stays.
-    Other journeys already open applets through it, an installed applet and
-    Pad in one, Daybook and Streams in another, so nothing replaces Sound
-    Lab in the canonical Desktop journey unless a need appears. The journey
-    drops its Sound Lab stages, and the workspace AGENTS.md's description of
-    the gate changes with it. Each test that also exercises something the
-    release ships, such as Streams beside Worlds, is decided on its own
-    before any of them moves, so the release's tests keep that coverage.
+    neither are audio output, with the sound synthesis libraries that feed
+    it, or data graphics: the plots, waveforms and instruments of the
+    rich-terminal series path, which only those applets use. Their tests
+    stay in their repositories and run on request, but they leave the
+    regression gate and the full runs of decision 36. The shared UIDL and
+    rich-terminal modules still load the data-graphics widget, so its code
+    stays in the image until the library inventory (Part 1d) settles it.
+    The canonical Desktop stops loading Sound Lab as a built-in, so none of
+    its code sits on the gate's image; Desk runs it, as it runs
+    Observatory, outside the Desktop. Desk's launcher stays. Other journeys
+    already open applets through it, an installed applet and Pad in one,
+    Daybook and Streams in another, so nothing replaces Sound Lab in the
+    canonical Desktop journey unless a need appears. The journey drops its
+    Sound Lab stages, and the workspace AGENTS.md's description of the gate
+    changes with it. A journey of Desk with one applet runs only when that
+    applet, or code it loads, has changed. The transport tests behind
+    Streams stay, since Streams and the internet are in the release, and
+    MegaPad's system test waits for the release's final run.
 36. A test runs only when something it reads has changed, in any of the
     system's repositories. The unit is a test file or a standalone journey,
     each run in a process of its own, so nothing one run holds in memory can
@@ -567,10 +572,15 @@ it. The tool lives in this repository, as the first piece of the
    through its Makefile targets, Akashic's with the MegaPad checkout on the
    path, and LM1's through its emulator harness. Decision 35's tests form a
    set of their own that runs on request.
-5. Seed the record with one full run, then measure how many tests a typical
-   slice skips. The measurement also shows whether the 37,000-line harness
-   file, which about 180 test files import and about one Akashic commit in
-   seven has touched since October, reruns too much to stay whole.
+5. Let the record fill as units run in ordinary work. The selection can
+   judge a unit only after its first run through the tool, so until then a
+   slice's tests are found as before, by searching for the tests that read
+   the files it changes. The first full run comes at the end of Part 2, as
+   decision 36 asks at the end of each part, and a measurement of how many
+   tests a typical slice skips follows it. The measurement also shows
+   whether the 37,000-line harness file, which about 180 test files import
+   and about one Akashic commit in seven has touched since October, reruns
+   too much to stay whole.
 6. Change Section 7's working rules and the workspace AGENTS.md so that the
    end of each slice runs the release's tests through the selection.
 
@@ -593,9 +603,14 @@ the key records.
 
 Steps 2 and 3 are built in `fantasy_engine.testing` (commit 43ab1a9), and
 step 4 covers every test file of MegaPad, Akashic and this repository and
-every LM1 batch: 323, 543, 2 and 39 units. The standalone journeys aren't
-units yet, and the set of decision 35's tests waits on the tests that also
-exercise shipped code. Two writes per MegaPad invocation came to light:
+every LM1 batch: 323, 543, 2 and 39 units. Decision 35's 34 units form the
+`outside` set, MegaPad's system test the `final` set that the release's
+final run adds, and the remaining 872 units the `release` set that runs
+with each change. The standalone journeys aren't units yet: the physical
+driver runs `git` to bind its evidence to the trees, and a unit that starts
+a program other than Python always runs, so the journeys need a way to
+keep that binding out of their keys. Two writes per MegaPad invocation came
+to light:
 the Makefile's accelerator step copies its 3 MB library into place even
 when nothing changed, and pytest's cache plugin rewrote a 1.1 MB file of
 test IDs. The tool builds the accelerator once per run and turns the cache

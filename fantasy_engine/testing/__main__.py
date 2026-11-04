@@ -7,9 +7,12 @@
     python -m fantasy_engine.testing explain UNIT        what changed since its pass
 
 A PATTERN matches unit names such as ``akashic:local_testing/test_pad.py``
-or ``lm1:phase1``, with shell wildcards; without a wildcard it matches any
-unit whose name contains it.  ``--set`` picks the release's units (the
-default), the units outside the release, or both.
+or ``lm1:phase1_io``, with shell wildcards; without a wildcard it matches any
+unit whose name contains it.  ``--set`` picks the units that run with each
+change (``release``, the default), those plus the units that wait for the
+release's final run (``final``), the units for what the release leaves out
+(``outside``), or every unit (``all``).  ``--recorded`` keeps only units the
+record already holds, which the selection can judge without running them.
 """
 
 from __future__ import annotations
@@ -21,7 +24,14 @@ from pathlib import Path
 
 from .runner import Lock, Runner, decide, launch_key
 from .store import Store
-from .suites import Unit, repositories
+from .suites import FINAL_ONLY, OUTSIDE_RELEASE, Unit, repositories
+
+_SETS = {
+    "release": ("release",),
+    "final": ("release", "final"),
+    "outside": ("outside",),
+    "all": ("release", "final", "outside"),
+}
 
 
 def _matches(unit: Unit, patterns: list[str]) -> bool:
@@ -36,22 +46,25 @@ def _matches(unit: Unit, patterns: list[str]) -> bool:
     return False
 
 
-def _select(args) -> tuple[list, list[Unit]]:
+def _select(args, store: Store | None = None) -> tuple[list, list[Unit]]:
     repos = repositories(Path(args.workspace) if args.workspace else None)
+    every = [unit for repo in repos for unit in repo.units()]
+    present = {repo.name for repo in repos}
+    known = {unit.id for unit in every}
+    stale = sorted(name for name in OUTSIDE_RELEASE | FINAL_ONLY
+                   if name.split(":", 1)[0] in present and name not in known)
+    for name in stale:
+        print("note: the sets name %s, which no longer exists" % name, file=sys.stderr)
     if args.repo:
-        unknown = set(args.repo) - {repo.name for repo in repos}
+        unknown = set(args.repo) - present
         if unknown:
             raise SystemExit("No repository named %s" % ", ".join(sorted(unknown)))
-        repos = [repo for repo in repos if repo.name in args.repo]
-    units = []
-    for repo in repos:
-        for unit in repo.units():
-            if args.set == "release" and not unit.in_release:
-                continue
-            if args.set == "outside" and unit.in_release:
-                continue
-            if _matches(unit, args.patterns):
-                units.append(unit)
+        every = [unit for unit in every if unit.repo.name in args.repo]
+    wanted = _SETS[args.set]
+    units = [unit for unit in every
+             if unit.set in wanted and _matches(unit, args.patterns)]
+    if getattr(args, "recorded", False) and store is not None:
+        units = [unit for unit in units if store.latest(unit.id) is not None]
     return repos, units
 
 
@@ -59,8 +72,9 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("patterns", nargs="*", metavar="PATTERN")
     parser.add_argument("--repo", action="append",
                         help="limit to a repository (repeatable)")
-    parser.add_argument("--set", choices=("release", "outside", "all"),
-                        default="release")
+    parser.add_argument("--set", choices=tuple(_SETS), default="release")
+    parser.add_argument("--recorded", action="store_true",
+                        help="only units the record already holds")
     parser.add_argument("--workspace", help="the folder holding the repositories")
     parser.add_argument("--store", help="the record file (default under ~/.cache)")
 
@@ -83,14 +97,13 @@ def main(argv: list[str] | None = None) -> int:
     _common(explain)
     args = parser.parse_args(argv)
 
-    repos, units = _select(args)
-    if args.command == "list":
-        for unit in units:
-            print(unit.id)
-        return 0
-
     store = Store(Path(args.store) if args.store else None)
     try:
+        repos, units = _select(args, store)
+        if args.command == "list":
+            for unit in units:
+                print(unit.id)
+            return 0
         if args.command == "explain":
             runner = Runner(store, repos=repos)
             for unit in units:

@@ -18,9 +18,59 @@ from pathlib import Path
 
 FANTASY_ENGINE_ROOT = Path(__file__).resolve().parents[2]
 
-# Units outside the first release (decision 35).  They stay in their
+# Units for what the first release leaves out (decision 35): Sound Lab,
+# Observatory and Worlds, audio output and the sound synthesis libraries,
+# and data graphics, the plots, waveforms and instruments of the rich
+# terminal's series path, which only those applets use.  They stay in their
 # repositories and run when asked for with ``--set outside``.
-OUTSIDE_RELEASE: frozenset[str] = frozenset()
+OUTSIDE_RELEASE: frozenset[str] = frozenset((
+    # Sound Lab, Observatory and Worlds
+    "akashic:local_testing/test_soundlab_fields.py",
+    "akashic:local_testing/test_soundlab_prompt_restore.py",
+    "akashic:local_testing/test_soundlab_waveform.py",
+    "akashic:local_testing/test_observatory_worlds_slice.py",
+    # the series path
+    "akashic:local_testing/test_data_graphics_series.py",
+    "akashic:local_testing/test_rich_field_series_reuse.py",
+    "akashic:local_testing/test_rich_series_producer.py",
+    "akashic:local_testing/test_rich_terminal_series_acceptance.py",
+    "akashic:local_testing/test_rich_terminal_series_engine.py",
+    "akashic:local_testing/test_rich_terminal_series_neutral.py",
+    "akashic:local_testing/test_rich_terminal_uidl_series_planner.py",
+    # data graphics: plots, waveforms and instruments
+    "akashic:local_testing/test_applet_data_graphics_integrations.py",
+    "akashic:local_testing/test_data_graphics_format.py",
+    "akashic:local_testing/test_data_graphics_plot.py",
+    "akashic:local_testing/test_data_graphics_waveform_cells.py",
+    "akashic:local_testing/test_data_graphics_waveform_widget.py",
+    "akashic:local_testing/test_data_graphics_widget.py",
+    "akashic:local_testing/test_rich_candidate_instruments.py",
+    "akashic:local_testing/test_rich_instrument_reuse.py",
+    "akashic:local_testing/test_rich_terminal_apt1_instrument_provider_structure.py",
+    "akashic:local_testing/test_rich_terminal_legacy_instrument_provider.py",
+    "akashic:local_testing/test_rich_terminal_plot_line_planner.py",
+    "akashic:local_testing/test_rich_terminal_plot_line_provider.py",
+    "akashic:local_testing/test_rich_terminal_uidl_instrument_planner.py",
+    "akashic:local_testing/test_semantic_data_graphics.py",
+    "akashic:local_testing/test_uidl_data_graphics_snapshot.py",
+    # sound synthesis
+    "akashic:local_testing/test_audio_fx.py",
+    "akashic:local_testing/test_audio_poly.py",
+    "akashic:local_testing/test_audio_string.py",
+    "akashic:local_testing/test_audio_synth.py",
+    "akashic:local_testing/test_fft_reverb.py",
+    # audio output
+    "megapad:tests/simulator/test_audio.py",
+    "megapad:tests/test_audio_output.py",
+    "megapad:tests/test_audio_sinks.py",
+))
+
+# Units that wait for the release's final run instead of running with each
+# change: MegaPad's system test, whose KDOS classes alone hold about 1,900
+# tests and peak near 6.7 GiB.
+FINAL_ONLY: frozenset[str] = frozenset((
+    "megapad:tests/test_system.py",
+))
 
 
 @dataclass(frozen=True)
@@ -33,8 +83,14 @@ class Unit:
         return "%s:%s" % (self.repo.name, self.name)
 
     @property
-    def in_release(self) -> bool:
-        return self.id not in OUTSIDE_RELEASE
+    def set(self) -> str:
+        """"outside" for decision 35's units, "final" for those that wait for
+        the final run, and "release" for the rest."""
+        if self.id in OUTSIDE_RELEASE:
+            return "outside"
+        if self.id in FINAL_ONLY:
+            return "final"
+        return "release"
 
 
 @dataclass
