@@ -11,11 +11,13 @@ for later releases. Everything outside `dev/` will document use and
 function. The release is cut on a branch without `dev/`, so the release
 carries none of it, while main keeps it for the next release (decision 33).
 
-Status on 2026-10-27: the plan is locked in. Part 1 (organization) is under
-way: Part 1c, the LM1 split, is done, and Part 1d, the library
-inventory, has its first static pass. The Chimera prototype that used to
-live here is kept by the tag `archive/chimera-a499082-20261027`, and commit
-54616ae removed it from the tree.
+Status on 2026-11-03: release work has begun with Part 1h, test selection,
+because every later part's testing goes through it. The rest of Part 1
+(organization) stands as it did when the plan was locked in on 2026-10-27:
+Part 1c, the LM1 split, is done, and Part 1d, the library inventory, has
+its first static pass. The Chimera prototype that used to live here is kept
+by the tag `archive/chimera-a499082-20261027`, and commit 54616ae removed it
+from the tree.
 
 Section 1 says what the release is. Sections 2 and 3 list the decisions
 taken and the decisions still open. Section 4 records where each component
@@ -57,7 +59,7 @@ made.
 ## 2. Decisions taken
 
 All were taken on 2026-10-27, except decisions 35 and 36, taken on
-2026-10-28.
+2026-10-28 and revised on 2026-11-03.
 
 1. fantasy-engine is the release repository. It sits beside `megapad/`,
    `akashic/` and `lm1/` in the workspace.
@@ -248,28 +250,45 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     open.
 35. Sound Lab, Worlds and Observatory are not in the first release, and
     neither are audio output and the rich-terminal series path, which those
-    applets exercise. Their tests leave the release's tests once release
-    work starts; until then, current work keeps its gate as it stands.
-    Desk's launcher stays. Other journeys already open applets through it,
-    an installed applet and Pad in one, Daybook and Streams in another, so
-    nothing replaces Sound Lab in the canonical Desktop journey unless a
-    need appears. When release work starts, that journey drops its Sound Lab
-    stages, and the workspace AGENTS.md's description of the gate changes
-    with it.
-36. A test runs only when something that can affect its result has changed.
-    Its key hashes the files `build_image` puts on its disk image, by name
-    and contents rather than as raw image bytes, so that times or other
-    varying data in an image can't defeat the match; the Python modules the
-    harness imported, read from `sys.modules`; its fixture folders; its
-    settings, with PYTHONHASHSEED pinned; and MegaPad's tree as one input. A
-    test whose key matches a passing run is skipped and reported as
-    unchanged since that run. A test bounded by a wall-clock watchdog always
-    runs, because host load can change its result. A full run before each
-    merge and each release checks the selection, and any result the
-    selection failed to predict counts as a missed input, fixed in the key.
-    Inputs are read from what the tools already know, never declared by
-    hand, because a stale declaration silently skips a test that would have
-    failed (Part 1h).
+    applets exercise. Their tests stay in their repositories and run on
+    request, but they leave the regression gate and the full runs of
+    decision 36. The canonical Desktop stops loading Sound Lab as a
+    built-in, so none of its code sits on the gate's image; Desk runs it,
+    as it runs Observatory, outside the Desktop. Desk's launcher stays.
+    Other journeys already open applets through it, an installed applet and
+    Pad in one, Daybook and Streams in another, so nothing replaces Sound
+    Lab in the canonical Desktop journey unless a need appears. The journey
+    drops its Sound Lab stages, and the workspace AGENTS.md's description of
+    the gate changes with it. Each test that also exercises something the
+    release ships, such as Streams beside Worlds, is decided on its own
+    before any of them moves, so the release's tests keep that coverage.
+36. A test runs only when something it reads has changed, in any of the
+    system's repositories. The unit is a test file or a standalone journey,
+    each run in a process of its own, so nothing one run holds in memory can
+    reach another's result. Its key records what that process and every
+    Python program it starts actually read: each file opened for reading and
+    each directory listed, which takes in the sources `build_image` puts on
+    a disk image, the BIOS and KDOS files the harness reads from MegaPad, and
+    fixtures; each module imported, native extensions included; and the
+    interpreter, arguments and environment the run starts with,
+    PYTHONHASHSEED pinned among them. Files the run writes itself, such as
+    its disk image, are outputs rather than inputs. Inputs are read from
+    what the tools already know, never declared by hand, because a stale
+    declaration silently skips a test that would have failed.
+
+    A test whose key matches a passing run is skipped and reported as
+    unchanged since that run. A run that starts a program other than Python
+    always runs, because that program's reads go unrecorded; wrappers such
+    as `env`, which only start another program, don't count. A wall-clock
+    limit doesn't force a rerun: when nothing a test reads has changed, a
+    rerun can differ only through the host's load, which says nothing about
+    the code. A full run at the end of each of this plan's parts, before
+    each merge and before each release, checks the selection, and any result
+    it failed to predict counts as a missed input, fixed in the recording.
+    One tool in this repository runs MegaPad's, Akashic's and LM1's tests
+    and keeps one record of passing runs for all of them, and each
+    repository's tests still run without it, with nothing skipped
+    (Part 1h).
 
 ## 3. Open decisions
 
@@ -351,6 +370,9 @@ updated for the work done since.
   rules for internet access.
 - The MMIO map appears to have room above +0xC20, and port-bridge ports 4, 5
   and 7 are unassigned.
+- Its 326 test files run only through Makefile targets such as
+  `make test-sequential`, which build the accelerator first;
+  `tests/conftest.py` stops a bare `pytest` run.
 - Nothing in MegaPad mentions LM1.
 
 ### Akashic (`akashic/`, 697 library files in 31 groups)
@@ -376,7 +398,9 @@ updated for the work done since.
   ext4 (read-only, plus a staged write mode labelled a
   "controlled/trusted-local preview", limited to 1 KiB blocks and 256-byte
   inodes). The image builder and the boot path use MP64FS only.
-- The 512 test files all live in `local_testing/`.
+- The 543 test files all live in `local_testing/`. The harness reads
+  `bios.asm` and `kdos.f` from the MegaPad checkout beside it, and some
+  tests start `megapad.py` as a separate process.
 
 ### LM1 (`lm1/`, 215 tracked files)
 
@@ -397,13 +421,13 @@ updated for the work done since.
   GC-engine RTL is not simulated. The FPGA flow stops at synthesis, at about
   90K LUTs for one 8-tile cluster.
 
-### Work under way elsewhere
+### Recent work elsewhere
 
-The frames-follow-change plan (Akashic `docs/rich-terminal/FRAMES-FOLLOW-CHANGE.md`,
-branch `feature/frames-follow-change`) has parts 0 to 5 done and parts 6 to
-10 to go. Its worktrees under `.worktrees/frames-follow-change/` must stay
-untouched while their journeys run. Release work in `megapad/` and
-`akashic/` goes on branches of its own.
+The frames-follow-change plan (Akashic
+`docs/rich-terminal/FRAMES-FOLLOW-CHANGE.md`) finished on 2026-11-01 and
+landed on both components' main branches. Its worktrees and the components'
+other local branches were retired the same day, so work in `megapad/` and
+`akashic/` now happens in their main checkouts.
 
 ## 5. Parts
 
@@ -522,13 +546,37 @@ and used.
    metadata line is replaced.
 
 Done when `reuse lint` passes in every repository.
-**1h. Test selection** (Decided; timing Proposed). Build decision 36's
-selection into the harness: compute each test's key, record the keys of
-passing runs, skip tests whose keys match, and report every skipped test
-with the run it relies on, so evidence notes cite what actually ran. First
-check whether `build_image` gives identical output for identical inputs,
-then measure how many tests a typical slice skips. Proposed: build it early
-in release work, since every later part's testing uses it.
+
+**1h. Test selection** (Decided). Decision 36's selection is built first
+among the release's parts, since every later part's testing goes through
+it. The tool lives in this repository, as the first piece of the
+`fantasy_engine/` package in Part 1a's layout.
+
+1. Check whether `build_image` gives identical output for identical inputs,
+   and look for anything else a run depends on that the recording can't
+   see, such as a guest clock that follows the host's.
+2. Record what each run reads. An audit hook, installed through
+   `sitecustomize` in every Python process the run starts, notes each file
+   opened, each directory listed, each module imported and each program
+   started.
+3. Run each test file and journey in a process of its own, compute its key,
+   keep the keys and results of passing runs, and skip the tests whose keys
+   match. Every skipped test is reported with the run it relies on and that
+   run's component commits, so evidence notes cite what actually ran.
+4. Drive each repository's tests through its own entry point: MegaPad's
+   through its Makefile targets, Akashic's with the MegaPad checkout on the
+   path, and LM1's through its emulator harness. Decision 35's tests form a
+   set of their own that runs on request.
+5. Seed the record with one full run, then measure how many tests a typical
+   slice skips. The measurement also shows whether the 37,000-line harness
+   file, which about 180 test files import and about one Akashic commit in
+   seven has touched since October, reruns too much to stay whole.
+6. Change Section 7's working rules and the workspace AGENTS.md so that the
+   end of each slice runs the release's tests through the selection.
+
+Done when every repository's tests run through the tool, a slice's run
+skips the tests whose inputs the slice didn't change, and a full run finds
+no result the selection failed to predict.
 
 ### Part 2. Storage: ext4
 
@@ -698,9 +746,23 @@ Goal: a configuration's Practice decides what opens and what it can reach.
 - **5d. One Practice per image** fits today's single-head runtime. The
   multiple-Practice catalog (Gate 13A in `DESK_ECOSYSTEM_CONTRACT.md`) stays
   deferred unless a configuration needs several Practices.
+- **5e. Desk without applet code** (Decided). Desk's own code is written for
+  particular applets in three places, and each moves out. Desk loads
+  modules from Daybook and the Agent and runs their services itself:
+  Daybook's reminders and scheduled runs, and the Agent's runtime and
+  dispatch. Reminders must fire while Daybook is closed, so something that
+  stays running has to own them, but that owner becomes a general service
+  Desk hosts. Desk's service table also hands some services only to named
+  applets (the Agent's to the Agent, Daybook's automations to Daybook, the
+  resource directory to Library), and a closed table lists the Daybook,
+  File Explorer and Streams actions the Agent may call. The table is closed
+  so that no applet can widen the Agent's reach. That protection stays, but
+  the rules themselves move into the Practice, which sets what may act.
+  Finally, Desk caps installed applets at 32 with a fixed constant, which
+  gives way to a count sized from need.
 
-Done when each configuration's applets open from its Practice, and no applet
-is queued by autoexec text.
+Done when each configuration's applets open from its Practice, no applet is
+queued by autoexec text, and Desk's code names no applet.
 
 ### Part 6. The sample configurations
 
@@ -968,9 +1030,10 @@ or before a chip is made, a lawyer reviews the licensing.
 
 ## 6. Order
 
-- Part 1 comes first. Part 1c is done, and 1b, 1d and 1g proceed. Part 1g
-  touches every repository; in `megapad/` and `akashic/` it goes on branches
-  of its own.
+- Part 1 comes first, and within it Part 1h (Decided), since every later
+  part's testing goes through its selection. Part 1c is done, and 1b, 1d and
+  1g proceed. Part 1g touches every repository; in `megapad/` and `akashic/`
+  it goes on branches of its own.
 - Three parts lead (Decided): Part 2 (ext4), Part 3 (the simulator) and
   Part 8 (the LM1 chiplet). They proceed side by side, mostly in different
   repositories: Part 2 in Akashic and MegaPad, Part 3 in MegaPad, and Part 8
