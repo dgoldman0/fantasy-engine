@@ -679,6 +679,26 @@ done (Decided, 2026-11-04). The suite is one selection unit of 797 cases and
 about five hours, and every change to the driver reruns all of it, so a full
 run per slice would add about 30 hours of waiting across the step.
 
+Each transaction the writer makes today scans every other file's block map,
+to prove that no other file owns a block the transaction allocates, rewrites
+or frees, so even a small save costs more as the volume holds more files. The
+writer instead proves once per mount, at its first write, that the block
+bitmaps match what the files and the fixed metadata hold, with each block
+owned once, and every transaction after that checks only its own changes
+(Decided, 2026-11-04). Freeing a block needs its bit set and the file's old
+map holding it once, allocating needs its bit clear, and the file's new map
+must differ from its old one by exactly the blocks allocated and freed. That
+last check is new: without it, a block mapped by mistake was caught only
+when a later transaction's scan reached it. Nothing else writes a mounted
+volume, so the proof and these checks answer everything the scan asked: the
+guarantee is unchanged, and each save costs only what it touches. Production
+ext4 trusts its bitmaps instead and leaves the cross-file check to fsck; the
+device has no fsck, and that check is part of the writer's guarantee. The
+writer refuses every write to a volume whose bitmaps and files disagree
+anywhere, where the scan refused only a write that touched the mismatch. The
+proof's working memory is one bit per block, sized from the volume and freed
+when the proof ends.
+
 Proposed: every configuration boots with three volumes.
 
 - **System volume, ext4, read-only.** KDOS, the system modules, and Akashic's
@@ -699,7 +719,8 @@ Steps:
 
 1. Settle the boot path. Done: a small MP64FS boot volume.
 2. Close the writer's alpha gaps: general allocation, renaming over an
-   existing file, and folders.
+   existing file, and folders. Prove block ownership once per mount rather
+   than on every write.
 3. Teach KDOS to load modules from ext4 volumes.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
