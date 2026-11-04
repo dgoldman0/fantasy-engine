@@ -744,6 +744,13 @@ failures predate this work and sit in that ground: the recovery-anchor and
 preflight-authority tests, two orphan-cleanup flush-fence cases, an RMDIR
 refusal test and a truncate-to-zero union test.
 
+Truncation is one general routine too, for anything that fits one transaction
+(Akashic db9cccc4). A shrink releases every block past the new end at any
+extent depth and a growth leaves a hole, replacing the bounded same-block
+shrink and the depth-zero truncate-to-zero. A truncate whose release does not
+fit one transaction refuses; truncation across transactions, with the orphan
+file carrying the file over a crash, comes next.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
