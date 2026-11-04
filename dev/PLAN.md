@@ -673,6 +673,12 @@ allocator, and one directory insert that create, mkdir, link and rename
 share. Code and tests that already pass get reworked, and the writer ends
 with less code and no gaps between cases.
 
+Each step-2 slice ends with its own tests plus one or two tests of every
+other ext4 operation, and the whole ext4 suite runs once, when the step is
+done (Decided, 2026-11-04). The suite is one selection unit of 797 cases and
+about five hours, and every change to the driver reruns all of it, so a full
+run per slice would add about 30 hours of waiting across the step.
+
 Proposed: every configuration boots with three volumes.
 
 - **System volume, ext4, read-only.** KDOS, the system modules, and Akashic's
@@ -720,6 +726,23 @@ reads. The rest follows from the per-write design: each checkpoint
 reauthenticates the whole mount three times, each write walks every other
 inode's map, both grow with the volume rather than the write, and each block
 is its own transaction.
+
+Progress (2026-11-04, continued). Writing file data is now one general
+routine (Akashic e4047fca), which replaced eight bounded one-block cases. It
+overwrites, grows a file from any end, and writes past the end, leaving
+holes. It works on extent trees of any depth, inserting, splitting and
+growing them as the kernel does, and it allocates runs next to the data
+before them, setting up a never-used block group on that group's first
+allocation. One call commits as much as one journal transaction holds under
+the writer's profile, so a larger write spans several transactions.
+Appending 20 KiB to a 54-byte file on the 1 KiB-block fixture, with a
+16-home, 16-block profile, takes two transactions and 271M guest steps,
+mount and unmount included; before, each 1 KiB block was its own append of
+79M steps. The driver is 648 lines shorter and its tests 7,115. Truncation,
+deleting large files, folders and renaming over a file remain. Six suite
+failures predate this work and sit in that ground: the recovery-anchor and
+preflight-authority tests, two orphan-cleanup flush-fence cases, an RMDIR
+refusal test and a truncate-to-zero union test.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
