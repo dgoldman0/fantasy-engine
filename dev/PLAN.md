@@ -671,13 +671,14 @@ Proposed: every configuration boots with three volumes.
   move here.
 
 A read-only system volume keeps the installed libraries safe (Part 7), and
-resetting a system means replacing one file. One design question remains.
-The BIOS loads KDOS from MP64FS today, so either a small MP64FS boot volume
-stays, or the BIOS learns to read ext4.
+resetting a system means replacing one file. The BIOS keeps loading KDOS
+from a small MP64FS boot volume (Decided, 2026-11-04), because teaching the
+BIOS ext4 would bloat it. The boot volume therefore also holds whatever KDOS
+loads before it can mount ext4.
 
 Steps:
 
-1. Settle the boot path.
+1. Settle the boot path. Done: a small MP64FS boot volume.
 2. Close the writer's two alpha gaps: general allocation, and renaming over
    an existing file.
 3. Teach KDOS to load modules from ext4 volumes.
@@ -688,6 +689,32 @@ Done when the canonical Desktop boots from an ext4 system volume that holds
 its modules as individual files, a user volume takes everyday writes and
 passes the host's `e2fsck`, also after a run killed mid-write, and the
 physical journey passes.
+
+Progress (2026-11-04). The ext4 suite could not run until two repairs.
+MegaPad's storage takes `file_holds_media` when media is replaced (MegaPad
+2faa96d8), which the suite's two calls lacked, and the profile's pinned
+e2fsprogs 1.47.4 is now built from its pinned source archive under
+`~/.cache/fantasy-engine/e2fsprogs-1.47.4`. On the 64 MiB, 1 KiB-block
+fixture, appending one 1 KiB block cost 230M guest steps and 5,079 block
+reads, with 21 writes and 11 flushes, which is at least 2.3 s at the SoC's
+100 MHz clock. Most of that repeated proofs inside one write. The ownership
+scan re-read and re-verified the same descriptor and bitmap blocks for each
+of the 1,281 blocks the resize inode maps. The journal-membership table
+hashed by block number and probed thousands of slots per lookup. Each
+checkpoint rebuilt the 4,096-entry journal map three times. With those
+repetitions gone and every check kept, an append costs 79M steps and 953
+reads. The rest follows from the per-write design: each checkpoint
+reauthenticates the whole mount three times, each write walks every other
+inode's map, both grow with the volume rather than the write, and each block
+is its own transaction.
+
+The writer's bounded cases also leave folders short of everyday use, beyond
+the two gaps above. Making a folder or a link, or renaming into a full
+directory block, fails; a folder can be removed only while it has never grown
+past one block; a folder cannot be renamed within its parent, nor moved
+unless it is empty; and in an indexed folder the first name in each block
+cannot be deleted. Proposed: step 2 closes these too, since the standard
+names renaming and folders of a few hundred entries.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
