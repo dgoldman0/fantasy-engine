@@ -704,7 +704,7 @@ from the volume and kept for the mount beside its other workspaces, because
 every transaction's check reuses it while mount cleanup's journal writer
 occupies the end of the mount arena (revised 2026-11-05).
 
-Proposed: every configuration boots with three volumes.
+Every configuration boots with three volumes (Decided, 2026-11-05).
 
 - **System volume, ext4, read-only.** KDOS, the system modules, and Akashic's
   libraries and applets as plain files.
