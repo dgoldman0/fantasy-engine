@@ -699,8 +699,10 @@ ext4 trusts its bitmaps instead and leaves the cross-file check to fsck; the
 device has no fsck, and that check is part of the writer's guarantee. The
 writer refuses every write to a volume whose bitmaps and files disagree
 anywhere, where the scan refused only a write that touched the mismatch. The
-proof's working memory is one bit per block, sized from the volume and freed
-when the proof ends.
+proof's working memory is one bit per block and one block of scratch, sized
+from the volume and kept for the mount beside its other workspaces, because
+every transaction's check reuses it while mount cleanup's journal writer
+occupies the end of the mount arena (revised 2026-11-05).
 
 Proposed: every configuration boots with three volumes.
 
@@ -793,6 +795,22 @@ file's map that proving ownership once per mount replaces next. Deleting
 large files, folders and renaming over a file remain after that. Of the six
 older suite failures, the truncate-to-zero union test went with the bounded
 truncate it tested (Akashic db9cccc4), and five remain.
+
+Block ownership is now proved once per mount (Akashic 6ebed51d). Mount
+recovery proves it before its first orphan cleanup and every mounted mutation
+at its entry, so the proof runs only on mounts that write, at 28.6 million
+guest steps on the fixture. Every staged transaction then checks that its
+maps change by exactly the blocks it allocates and frees, in one routine that
+writing, truncation, the release passes and every namespace operation share.
+The per-write scans are gone, and the driver is 284 lines shorter. Ten cases
+that create, link, unlink, remove, rename and set attributes and reclaim
+orphans at mount take 32% fewer guest steps than at aace7883, between 23% and
+39% fewer per operation with the proof included; appending 20 KiB takes 191
+million steps, down from 271 million, and truncating the 340-extent file to
+zero takes 1.29 billion, down from 1.37 billion. The five older suite
+failures are unchanged, and the preflight-authority case among them fails the
+same way at aace7883. Deleting large files, folders and renaming over a file
+come next.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
