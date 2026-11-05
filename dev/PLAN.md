@@ -455,9 +455,12 @@ fantasy-engine/
   tests/             release checks
 ```
 
-`README.md` and `docs/` arrive with the first configuration that runs
-(Part 4), so nothing here describes plans. Nothing in this repository copies
-component source.
+`README.md` arrived early, on 2026-11-05. It says what the system is and what
+it stands for, for readers who aren't engineers, and it ends with where the
+work stands. With the first configuration that runs (Part 4), how to install
+and run it replaces that ending and `docs/` arrives, so from then on nothing
+outside `dev/` describes plans. Nothing in this repository copies component
+source.
 
 **1b. The lock file** (Decided). A small file here names each component's
 repository and commit. The build takes exactly those commits, with
