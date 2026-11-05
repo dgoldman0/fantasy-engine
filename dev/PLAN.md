@@ -772,6 +772,25 @@ shrink and the depth-zero truncate-to-zero. A truncate whose release does not
 fit one transaction refuses; truncation across transactions, with the orphan
 file carrying the file over a crash, comes next.
 
+Truncation across transactions now runs through the orphan file (Akashic
+aace7883), as the kernel's ext4 truncates. When a shrink's release does not
+fit one transaction, the first transaction commits the new size behind a
+modern orphan record and release passes free the blocks past the new end.
+The record's final cleanup, folded into the last pass when its homes fit,
+zeroes the tail of the block that holds the new end and removes the record.
+A crash therefore leaves either the old file or a record that mount recovery
+finishes with the same passes. Recovery runs them on a linked orphan's extent
+tree at any depth, so it also finishes truncations the kernel leaves behind,
+and before its first write it still refuses a union whose blocks another file
+maps. The bounded truncate-to-zero insertion and the bounded linked cleanup
+it fed are gone. Truncating the fixture's 340-extent depth-two file to zero
+takes 1.37 billion guest steps with mount and unmount, at least 13.7 s at the
+SoC's 100 MHz clock, and each release pass repeats the scan of every other
+file's map that proving ownership once per mount replaces next. Deleting
+large files, folders and renaming over a file remain after that. Of the six
+older suite failures, the truncate-to-zero union test went with the bounded
+truncate it tested (Akashic db9cccc4), and five remain.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
