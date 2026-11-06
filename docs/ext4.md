@@ -63,10 +63,11 @@ stays as it was when the driver refuses a transaction. Then it writes the file
 data in place, writes the metadata to the journal with a commit block, and
 copies the metadata home. At the next mount after a crash, the driver replays
 every committed transaction and finishes the work the volume's orphan file
-records, such as a truncation that spans several transactions or the deletion
-of a file that was still open. It completes a truncation that Linux left
-unfinished in the same way. Because the journal follows the standard format,
-e2fsck on the PC replays it too.
+records, such as a truncation or a deletion that spans several transactions,
+or the deletion of a file that was still open. It completes a truncation or a
+deletion that Linux left unfinished in the same way, whether the file's map is
+an extent tree or one of ext4's older block maps. Because the journal follows
+the standard format, e2fsck on the PC replays it too.
 
 All of the driver's working memory comes from arenas the program provides, and
 the driver sizes it from the volume: the ownership proof needs one bit per
@@ -228,7 +229,9 @@ close.
   indexed leaf that has room.
 - **Remove a name** (`VFS-RM` on a file): removes one name. When that was the
   file's last name, the driver deletes the file at once, or at its last close
-  if it is open. A deleted file's extent tree may be at most one level deep.
+  if it is open. Its extent tree may have any depth, and a large file's
+  blocks go free over several transactions, recorded in the orphan file,
+  so after a crash the next mount finishes the deletion.
 - **Remove a folder** (`VFS-RM` on a folder): removes an empty folder that has
   stayed within one block.
 - **Rename** (`VFS-RENAME`, `VFS-RENAME-AT`): moves a file within a folder or
@@ -272,39 +275,39 @@ mount produces.
 ## Notes
 
 This page describes the driver in Akashic at commit
-[`6ebed51d`](https://github.com/dgoldman0/akashic/commit/6ebed51dc892319448a50786d7115f891c8dacfd)
+[`524ae3fa`](https://github.com/dgoldman0/akashic/commit/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd)
 of 5 November 2026. Akashic's documentation of
-[the driver](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md)
+[the driver](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md)
 and of
-[the format profile](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/ext4-compatibility-profile.md)
+[the format profile](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/ext4-compatibility-profile.md)
 is the full reference. The statements above rest on these places in that
 commit:
 
 - The ownership proof and each transaction's map check:
-  [Block ownership](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#block-ownership),
+  [Block ownership](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#block-ownership),
   and the proof in
-  [`vfs-ext4.f`](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/akashic/utils/fs/drivers/vfs-ext4.f#L11663).
+  [`vfs-ext4.f`](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/akashic/utils/fs/drivers/vfs-ext4.f#L11580).
 - Checksums in MegaPad's CRC32C hardware:
-  [the driver document](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md?plain=1#L773).
+  [the driver document](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md?plain=1#L735).
 - The exact feature profile:
-  [Exact primary feature set](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/ext4-compatibility-profile.md#exact-primary-feature-set),
+  [Exact primary feature set](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/ext4-compatibility-profile.md#exact-primary-feature-set),
   checked in
-  [`vfs-ext4-admission.f`](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/akashic/utils/fs/drivers/ext4/vfs-ext4-admission.f#L929-L956).
+  [`vfs-ext4-admission.f`](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/akashic/utils/fs/drivers/ext4/vfs-ext4-admission.f#L929-L956).
 - Mounting, the writer's profile and its clock:
-  [Mounting](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#mounting).
+  [Mounting](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#mounting).
 - Writes, and what a crash leaves:
-  [General regular-file write](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#general-regular-file-write)
+  [General regular-file write](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#general-regular-file-write)
   and
-  [Progress and crash boundaries](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#progress-and-crash-boundaries).
+  [Progress and crash boundaries](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#progress-and-crash-boundaries).
 - Truncation across transactions:
-  [General TRUNCATE](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#general-truncate).
+  [General TRUNCATE](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#general-truncate).
 - The writer's operations and their shapes:
-  [Current staged writes](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#current-staged-writes)
+  [Current staged writes](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#current-staged-writes)
   and
-  [Deliberate remaining limits](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#deliberate-remaining-limits).
+  [Deliberate remaining limits](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#deliberate-remaining-limits).
 - What the read-only binding reads:
-  [Read and inspection behavior](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/docs/utils/fs/drivers/vfs-ext4.md#read-and-inspection-behavior).
+  [Read and inspection behavior](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/docs/utils/fs/drivers/vfs-ext4.md#read-and-inspection-behavior).
 - The mke2fs options of the volumes the driver is checked against:
-  [the fixture manifest](https://github.com/dgoldman0/akashic/blob/6ebed51dc892319448a50786d7115f891c8dacfd/local_testing/fixtures/ext4-profile/manifest.json#L38-L72).
+  [the fixture manifest](https://github.com/dgoldman0/akashic/blob/524ae3fadefa8d647f1ecd411ec3b06886a6cfbd/local_testing/fixtures/ext4-profile/manifest.json#L38-L72).
 - KDOS's block devices and volumes: MegaPad's
   [block-volume contract](https://github.com/dgoldman0/megapad/blob/c3e8ef5f5e2c89c8f99f9919476fdbd31b89ef7e/docs/block-volume-contract.md).
