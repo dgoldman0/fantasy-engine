@@ -827,16 +827,39 @@ Twenty reclaim and unlink cases of the older shapes take 1.1% more steps
 than at 6ebed51d: the mount reclaims between 10% fewer and 5.6% more, and a
 sparse file's unlink under a six-home writer 18% more, because the pass's
 room check counts the superblock twice and splits that cleanup in two.
-Each pass also validates the file's whole map several times, about seven
-by a count of its checks, so the work of deleting a fragmented file grows
-with the square of its runs: a 186-block legacy map with data in every
-branch takes 1.0 billion steps.
+Each pass also validates the file's whole map several times, so the work
+of deleting a fragmented file grows with the square of its runs: a
+186-block legacy map with data in every branch takes 1.0 billion steps.
 Both costs sit in the release passes, which truncation shares. Nine older
 suite failures remain, the five and four write-prefix cases whose tables
 expect the inode home first, all failing the same way at 6ebed51d. One
 more test that failed at 6ebed51d now passes: recovery answers a linked
 directory as unsupported recovery, where it answered with the write
 path's feature detail. Folders and renaming over a file come next.
+
+Release passes now walk each map once per write and count the superblock
+once (Akashic a5c9cb70). Every step of an operation authenticated its
+target by validating its whole map again, so under a sixteen-home,
+one-revoke writer a release pass of a 120-extent file walked the map
+twelve times and the pass that deletes the file eighteen. A validation
+that passed is now kept until a write could change what it read, which a
+journal write on a mount with proved ownership cannot. A plain pass
+therefore walks the map three times: once in its checkpoint's reload after
+the home writes, and twice in the map check, before and after the
+transaction. The deletion pass walks it once, and every other operation
+gains the same way. The room check counts the superblock once, so a
+sparse file's unlink under a six-home writer is one transaction again. The
+280 cases of the deletion and truncation families and the sample that pass
+on both commits take 8.3% fewer guest steps than at 524ae3fa, and the
+slowest is 0.17% slower. Unlinking the 340-extent file takes 534 million
+steps, where it took 1.44 billion, at least 5.3 s at the SoC's 100 MHz
+clock; truncating it to zero across transactions takes 661 million, where
+it took 1.25 billion; and deleting the 186-block legacy map takes 883
+million, 12.6% fewer. A plain pass's largest cost is now its checkpoint's
+three reloads of the whole mount, 66 of its 119 million cycles in the
+120-extent case, which grow with the volume rather than the file. Nine
+older suite failures remain, and the six these families reach fail as at
+524ae3fa. Folders and renaming over a file come next.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
