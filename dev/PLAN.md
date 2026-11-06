@@ -812,6 +812,32 @@ failures are unchanged, and the preflight-authority case among them fails the
 same way at aace7883. Deleting large files, folders and renaming over a file
 come next.
 
+Deleting a file now runs the release passes too (Akashic 524ae3fa). Removing a
+file's last name commits the removal behind a modern orphan record, and
+release passes free its map from the end, at any extent depth or for any
+legacy block map; the pass that frees the rest also deletes the inode when
+the deletion's homes fit. The closed unlink, the last close of an open file
+and mount recovery share the passes, so recovery also deletes files of any
+size and map that Linux leaves unlinked, and it finishes a truncation of a
+linked file with a legacy map. The bounded deletion shapes and their
+classifier are gone, and the driver is 189 lines shorter. Unlinking the
+fixture's 340-extent file, which 6ebed51d refused, takes 1.44 billion guest
+steps with mount and unmount, at least 14.4 s at the SoC's 100 MHz clock.
+Twenty reclaim and unlink cases of the older shapes take 1.1% more steps
+than at 6ebed51d: the mount reclaims between 10% fewer and 5.6% more, and a
+sparse file's unlink under a six-home writer 18% more, because the pass's
+room check counts the superblock twice and splits that cleanup in two.
+Each pass also validates the file's whole map several times, about seven
+by a count of its checks, so the work of deleting a fragmented file grows
+with the square of its runs: a 186-block legacy map with data in every
+branch takes 1.0 billion steps.
+Both costs sit in the release passes, which truncation shares. Nine older
+suite failures remain, the five and four write-prefix cases whose tables
+expect the inode home first, all failing the same way at 6ebed51d. One
+more test that failed at 6ebed51d now passes: recovery answers a linked
+directory as unsupported recovery, where it answered with the write
+path's feature detail. Folders and renaming over a file come next.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
