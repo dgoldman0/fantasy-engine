@@ -888,6 +888,22 @@ in the driver's document (Akashic 108fe9fd) and waits until these repeats are
 gone. More rounds of the same kind come first, then folders and renaming over
 a file.
 
+Map walks and reloads now repeat less still (Akashic 5fe67063, 11733a88 and
+6b8a3201). A walk that claims or releases the blocks it reads leaves the check
+of a leaf's earlier entries for a shared block to those claims, which refuse
+the same block first. A plain validation compares each entry with its two
+neighbours among the leaf's earlier ranges, kept sorted, in place of every one
+of them. The orphan plan's build keeps the counts its reload took in the same
+map epoch, so a complete reload reads the orphan file once. Truncating the
+340-extent file to zero across transactions takes 279 million guest steps,
+where it took 434 million at c98dd55a, and unlinking it 279 million, where it
+took 388 million. A 100-byte overwrite costs 29 million cycles, where it cost
+37 million measured the same way, and the 172 cases that ran on both commits
+with the same work take 15.6% fewer steps. The largest costs left are the
+orphan file's count, a quarter of a small write, and in a large file's walks
+the allocation checks, which load a descriptor and read a bitmap for every
+extent.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
