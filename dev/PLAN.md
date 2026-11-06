@@ -904,6 +904,22 @@ orphan file's count, a quarter of a small write, and in a large file's walks
 the allocation checks, which load a descriptor and read a bitmap for every
 extent.
 
+Each group's block bitmap location and descriptor flags are now recorded once
+per map epoch (Akashic 00bccf41), so the allocation checks of a map walk read
+them in place of loading the group's descriptor for every range, about 11
+thousand cycles a load. Truncating the 340-extent file across transactions
+takes 237 million guest steps, where it took 279 million at 6b8a3201, and the
+107 cases that ran on both commits with the same work take 8.2% fewer steps.
+The rounds of removing repeated work end here, each having removed only work
+that repeated a check on unchanged inputs. Since 108fe9fd, where they began, a
+100-byte overwrite has gone from 53 to 29 million cycles, unlinking the
+340-extent file from 534 to 241 million guest steps and truncating it to zero
+across transactions from 661 to 237 million, at least 2.4 s at the SoC's 100
+MHz clock. The run found an eleventh older suite failure, from 6ebed51d: a
+test that fills every bitmap but one block, which no file owns, expects the
+write to answer VFS-E-NOSPC, and the ownership proof now refuses that volume
+as EXT4-D-DATA-MAP first. Folders and renaming over a file come next.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
