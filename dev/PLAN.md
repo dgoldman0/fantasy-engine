@@ -861,6 +861,33 @@ three reloads of the whole mount, 66 of its 119 million cycles in the
 older suite failures remain, and the six these families reach fail as at
 524ae3fa. Folders and renaming over a file come next.
 
+Checkpoints now skip the work that nothing has changed (Akashic b7e0242a,
+c592897d and c98dd55a). A complete reload of the mount stands until something
+outside the journal is written, and a transaction's data that takes only free
+blocks, as an append at a block boundary or a hole fill does, leaves it
+standing. While it stands, the reload before a checkpoint's home writes, the
+one after its journal release and the first of the two at unmount validate
+only the journal; the reload after the home writes stays complete,
+and every checkpoint now rereads each block it wrote, as only the orphan modes
+did before. Each range's static role is checked against a sorted table of the
+volume's metadata, built once until the next write outside the journal, in
+place of reading every group's descriptor for each range, and one journal
+validation checks the journal map's checksum once. Truncating the fixture's
+340-extent file to zero across transactions takes 434 million guest steps,
+where it took 661 million, and unlinking it 388 million, where it took 534
+million, at least 3.9 s at the SoC's 100 MHz clock. A 100-byte overwrite
+costs 36 million cycles, where it cost 53 million, and an append or a hole
+fill 25 million. The 303 cases that pass on both commits take 18.3% fewer
+steps than at a5c9cb70. Of the 587 write-path and source-only cases run, ten
+fail, all from before this work: the nine, failing as at 108fe9fd, and a
+tenth that has failed since 6ebed51d, where the ownership proof refuses a
+depth-one write whose index points into the journal ring as a block with two
+owners, EXT4-D-DATA-MAP, before the journal check whose EXT4-D-JOURNAL the
+test expects. A normal and safe mode like Desk's is recorded as a possibility
+in the driver's document (Akashic 108fe9fd) and waits until these repeats are
+gone. More rounds of the same kind come first, then folders and renaming over
+a file.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
