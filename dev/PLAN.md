@@ -949,6 +949,23 @@ pass. Removal and rename still accept only folders of one index node, so a
 folder grown past that refuses them until the general removal and the folder
 rename, the next two slices, use the insert's authentication.
 
+Unlink and rmdir now share one directory removal (Akashic e570e175), run by
+the same engine as the insert and admitting every folder it admits. A name
+leaves its block as the kernel removes it, joining the record before it or,
+as a block's first name, leaving its record unused, so the first name of an
+index block is no longer refused. Rmdir removes any empty folder, of any size,
+mode or shape, through the orphan file and the release passes a deleted file
+uses, as the kernel's rmdir does; a small folder's removal therefore takes
+three journal transactions where the bounded one-block path took one. Freed
+folder blocks take no revoke records, since the journal is reset after every
+transaction and nothing earlier is left in it to cancel. The removal's tests,
+the sample, the unlink, rmdir, rename and orphan-cleanup families and the
+insert's cases pass, 275 cases and one more skipped by design, and the older rmdir
+refusal failure now passes under the new rules. Rename keeps its own removal
+until the folder rename, the next slice, moves it onto this one and the shared
+insert. The folder walk still refuses unused records that keep a name, as
+older kernels and debugfs leave them, so a folder they edited refuses writes.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
