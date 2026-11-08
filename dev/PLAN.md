@@ -935,6 +935,20 @@ rename, unlink, rmdir and orphan-cleanup families with the sample, except the
 older rmdir refusal failure, unchanged. The folders' shared directory insert
 is next to be tested.
 
+Create, mkdir and link now share one directory insert (Akashic c7da101d) that
+grows a full folder as the Linux kernel does: a full one-block folder becomes
+an index, a full block splits, a full index root gains a level, and a full
+index node splits, up to the two levels ext4 allows without its large-directory
+feature. New blocks come from the general allocator and extent tree, and the
+bounded routines, their own allocator and map editor are gone. The insert
+authenticates its folder once where the old paths did it up to five times, so
+the first writes the tests measure take 2 to 62% fewer guest steps; on a
+journal already active, its measuring pass stages the insert once more than
+before. Its 61 cases, the source pins, the rename-over cases and the sample
+pass. Removal and rename still accept only folders of one index node, so a
+folder grown past that refuses them until the general removal and the folder
+rename, the next two slices, use the insert's authentication.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
