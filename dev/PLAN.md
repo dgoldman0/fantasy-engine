@@ -920,6 +920,21 @@ test that fills every bitmap but one block, which no file owns, expects the
 write to answer VFS-E-NOSPC, and the ownership proof now refuses that volume
 as EXT4-D-DATA-MAP first. Folders and renaming over a file come next.
 
+Renaming over an existing regular file now works (Akashic ab7b6c7d), the usual
+safe way to save. The victim's record takes the source's inode and the
+source's record joins its predecessor, so nothing is inserted, and the victim
+loses that link in the same transaction. A final victim enters the orphan file
+there, under a rename form of the final unlink's sealed certificate, whose
+every image the checkpoint rebuilds from the media, and drains as an unlinked
+file does: at once when closed, on its last close when open, and through mount
+recovery after a crash. A remaining link needs another name in the same
+folder, as unlink's does. A source that is the first name of an indexed leaf
+is still refused, as unlink's is, until the folders' general removal lifts
+that gate for both. Eight new cases pass, and so do the 214 cases of the
+rename, unlink, rmdir and orphan-cleanup families with the sample, except the
+older rmdir refusal failure, unchanged. The folders' shared directory insert
+is next to be tested.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
