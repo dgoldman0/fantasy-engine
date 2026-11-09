@@ -960,11 +960,35 @@ three journal transactions where the bounded one-block path took one. Freed
 folder blocks take no revoke records, since the journal is reset after every
 transaction and nothing earlier is left in it to cancel. The removal's tests,
 the sample, the unlink, rmdir, rename and orphan-cleanup families and the
-insert's cases pass, 275 cases and one more skipped by design, and the older rmdir
-refusal failure now passes under the new rules. Rename keeps its own removal
-until the folder rename, the next slice, moves it onto this one and the shared
-insert. The folder walk still refuses unused records that keep a name, as
-older kernels and debugfs leave them, so a folder they edited refuses writes.
+insert's cases pass, 275 cases and one more skipped by design, and the older
+rmdir refusal failure now passes under the new rules. Rename keeps its own
+removal until the folder rename, the next slice, moves it onto this one and
+the shared insert. The folder walk still refuses unused records that keep a
+name, as older kernels and debugfs leave them, so a folder they edited refuses
+writes.
+
+Rename now runs on the shared removal and insert (Akashic dd0082e7), which
+closes the step's last gap. The source's name leaves its folder as a removal
+takes it out, and the new name enters as an insert places it, growing a full
+folder, or takes over an existing name's record. Files and folders move within
+one folder or between two, over a file or an empty folder, and a moved
+folder's `..` follows it. Rename's own code is gone with the old removal it
+called, so the driver went from 29,873 lines before the folder work to 26,884.
+The rename tests and a sample of the insert and removal pass. The whole
+test_vfs_ext4 unit then ran once, in 2 h 46 min: 797 cases passed, one was
+skipped by design, and 12 failed. Ten are older failures recorded above, and
+the eleventh recorded one, the rmdir refusal, passes. One more older failure
+surfaced, identical at 00bccf41: a write into a file's own extent node is
+refused with the right diagnosis, but the test also expects the write's
+staging cell to name the node's block, and that cell holds zero. The last
+failure came from renaming over a file, whose new capability the binding test
+did not yet expect; Akashic 15345ea0 adds it. Eleven older failures remain.
+The VFS name cache now limits folder size more than the writer does. ext4 has
+no single-name lookup, so the VFS loads all of a folder's names before it
+resolves, creates, links, renames or removes one there, and its cache holds at
+most 64 KiB of names per mount. A folder with more names than that, about
+1,600 of 20 characters, therefore answers VFS-E-NOMEM to every path through
+it, before the writer runs.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
