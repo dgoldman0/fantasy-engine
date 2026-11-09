@@ -996,14 +996,18 @@ rename and remove check names that way, so a folder of 2,000 names resolves,
 reads, takes new names and loses them with only the names in use cached. The
 name pool grows from the mount's storage in 4 KiB chunks, with a free list for
 each name size (Akashic d96c1b0d), so a listing caches every name that storage
-holds. Listing a large folder still costs time that grows with the square of
-its size, about 2 billion guest steps for 1,600 names, since the cache compares
-each new name with every name it already holds in that folder; an index of
-cached names would remove that, and the cost is measured but not yet profiled.
-Two test harness gaps surfaced: test_vfs.py, test_vfs_mp64fs.py,
-test_vfs_fat.py and test_vfs_mount.py count failures without asserting them, so
-under pytest, and so in the test tool's record, a failing check passes; and
-test_vfs.py's script list had left out seven tests, which d96c1b0d adds.
+holds. The cache finds a name and a file's cached record through two hash
+indexes, and a folder's names are linked both ways (Akashic 45cd7310), so
+listing a folder costs time in proportion to its size: all 2,000 names list in
+218 million guest cycles, where 1,600 had taken about 2 billion guest steps. A
+binding that cannot look up a single name (MP64FS, FAT, the RAM disk) no longer
+walks the cache for eviction on every path it resolves (Akashic dd27cfbc). The
+four VFS test suites now fail a test whose check fails, and their checks read
+only what the program printed, not KDOS's echo of the source, which had let most
+MP64FS and FAT checks pass whatever the code did (Akashic 0f1d76ce). A survey
+found the same gaps in 69 other Akashic test files: in 50 the checks count
+failures without raising, and 19 are script-only drivers that pytest and the
+test tool never run; most of the 69 also match text against the echoed source.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
