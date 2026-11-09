@@ -990,6 +990,21 @@ most 64 KiB of names per mount. A folder with more names than that, about
 1,600 of 20 characters, therefore answers VFS-E-NOMEM to every path through
 it, before the writer runs.
 
+The VFS no longer loads a folder to check one name (Akashic def0488c): ext4
+looks a name up by reading only the blocks it can be in, and create, link,
+rename and remove check names that way, so a folder of 2,000 names resolves,
+reads, takes new names and loses them with only the names in use cached. The
+name pool grows from the mount's storage in 4 KiB chunks, with a free list for
+each name size (Akashic d96c1b0d), so a listing caches every name that storage
+holds. Listing a large folder still costs time that grows with the square of
+its size, about 2 billion guest steps for 1,600 names, since the cache compares
+each new name with every name it already holds in that folder; an index of
+cached names would remove that, and the cost is measured but not yet profiled.
+Two test harness gaps surfaced: test_vfs.py, test_vfs_mp64fs.py,
+test_vfs_fat.py and test_vfs_mount.py count failures without asserting them, so
+under pytest, and so in the test tool's record, a failing check passes; and
+test_vfs.py's script list had left out seven tests, which d96c1b0d adds.
+
 ### Part 3. The simulator: multicore and chiplet modules
 
 One of the three leading items. Steps 3a to 3d are decided.
