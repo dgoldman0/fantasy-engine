@@ -1001,13 +1001,17 @@ indexes, and a folder's names are linked both ways (Akashic 45cd7310), so
 listing a folder costs time in proportion to its size: all 2,000 names list in
 218 million guest cycles, where 1,600 had taken about 2 billion guest steps. A
 binding that cannot look up a single name (MP64FS, FAT, the RAM disk) no longer
-walks the cache for eviction on every path it resolves (Akashic dd27cfbc). The
-four VFS test suites now fail a test whose check fails, and their checks read
-only what the program printed, not KDOS's echo of the source, which had let most
-MP64FS and FAT checks pass whatever the code did (Akashic 0f1d76ce). A survey
-found the same gaps in 69 other Akashic test files: in 50 the checks count
-failures without raising, and 19 are script-only drivers that pytest and the
-test tool never run; most of the 69 also match text against the echoed source.
+walks the cache for eviction on every path it resolves (Akashic dd27cfbc). After
+a checkpoint tears, ext4 answers a read of a block the failed transaction was
+writing with the writer's recorded fault, not the torn or stale block, and
+answers every read so when the commit published and then failed the writer's own
+check (Akashic a6b626ab). The four VFS test suites now fail a test whose check
+fails, and their checks read only what the program printed, not KDOS's echo of
+the source, which had let most MP64FS and FAT checks pass whatever the code did
+(Akashic 0f1d76ce). A survey found the same gaps in 69 other Akashic test files:
+in 50 the checks count failures without raising, and 19 are script-only drivers
+that pytest and the test tool never run; most of the 69 also match text against
+the echoed source.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
