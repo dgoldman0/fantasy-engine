@@ -560,11 +560,13 @@ fail on what their libraries do:
 The four audio suites still cannot load their modules: their lists are stale,
 and 65 REQUIRE lines in the audio modules name the wrong folder (37 write audio/
 from inside audio/, 28 name a math module bare). test_sphincs passed the first
-nine of its fifteen lighter tests before a 45-minute cap. The five SPHINCS+
-tests with budgets of 50 to 100 billion steps, three there and two in test_tx,
-wait on one measured run. The suites' own run loops lack forth_snapshot.py's
-stall detection, so a hung load costs the tool's whole limit; moving them onto
-ForthSnapshot would remove about sixty copies of that loop.
+nine of its fifteen lighter tests before a 45-minute cap, and the other six
+together ran past a one-hour cap. Five SPHINCS+ tests have budgets of 50 to 100
+billion steps, three there and two in test_tx. The one measured,
+test_full_roundtrip, ran four hours without finishing, and the other four have
+not run. The suites' own run loops lack forth_snapshot.py's stall detection, so
+a hung load costs the tool's whole limit; moving them onto ForthSnapshot would
+remove about sixty copies of that loop.
 
 **1e. Retire the old working copies.** Older copies of LM1 and of this
 repository outside the workspace hold nothing the workspace lacks once this
