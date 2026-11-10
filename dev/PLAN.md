@@ -603,8 +603,9 @@ the present graph (Akashic 62f42a60).
 
 The other suites' own run loops still lack forth_snapshot.py's stall
 detection, so a hung load costs the tool's whole limit; moving them onto
-ForthSnapshot would remove about sixty copies of that loop. KDOS's silence
-after an uncaught THROW at the prompt is recorded here and left as it is.
+ForthSnapshot would remove about sixty copies of that loop. KDOS no longer
+goes silent after an uncaught THROW: it prints `uncaught THROW` with the code
+and returns to the prompt (MegaPad 1f4030a7).
 
 **1e. Retire the old working copies.** Older copies of LM1 and of this
 repository outside the workspace hold nothing the workspace lacks once this
@@ -709,6 +710,17 @@ test IDs. The tool builds the accelerator once per run and turns the cache
 off, which brings a MegaPad unit from about 4.5 MB of writes to about
 0.2 MB. Proposed: MegaPad's `accel` target writes nothing when the library
 is current, which removes the remaining copy from every test target.
+
+Open: resuming a unit that starts programs. A pytest unit cut off midway
+resumes after the tests it passed (53ec37d), but not when it starts a program
+other than Python, because the recording sees that the program started and
+not what it read. Twelve of the 283 recorded units start one: `git`, the TeX
+and PDF tools, `cp`, and the pinned e2fsprogs of the ext4 and module-source
+units, of which the ext4 unit is the one long enough to matter. Recording the
+program's own file would catch a changed tool and nothing it reads. Three
+ways are sound: each repository declares the tool folders whose programs read
+only their own files and their arguments, as the pinned e2fsprogs do; the
+tool traces what started programs read; or resume stays as it is.
 
 ### Part 2. Storage: ext4
 
@@ -836,7 +848,9 @@ also with the VFS cache limited to two entries, because a load resolves other
 modules' paths and the VFS evicts whenever a path is resolved. They run in the
 native simulator, which loads the whole ext4 driver in 0.6 s and mounts the
 volume in 0.3 s now that the driver's one anonymous definition has a name; the
-emulator takes about 1.2 billion steps to load it. One test loads the same
+emulator takes about 1.2 billion steps to load it. The simulator has since
+gained `:NONAME` itself (MegaPad 488b6b23), with anonymous bodies run by its
+reference interpreter. One test loads the same
 tree on the emulator. Plain module files keep one rule that linked chunks
 never had to: a comment or a string closes on its own line, since KDOS
 evaluates a file a line at a time. The driver had broken it in one stack
@@ -845,13 +859,28 @@ until fc8b0fb2 put the comment on one line. At MegaPad d8a92092 and Akashic
 fc8b0fb2 the physical Desktop journey passed, and so did the 214 test units
 the changes reach.
 
-Three of MegaPad's system tests fail on main and did before this work. In
-two, a load repeated after a failed one prints nothing more, which is what an
-uncaught THROW at the prompt looks like (Part 1d); what throws there is not
-known. The third expects a finished nested dependency to survive its parent's
-failure, where KDOS.md and the loader roll it back with the parent, and
-MegaPad's README still states the older rule. Fixes for the three are in
-work.
+Three of MegaPad's system tests had failed on main since October, and none
+showed a loader defect (MegaPad e42b0d1c). Two caught a failed load's THROW
+across a plain `EVALUATE` with a `CATCH` of their own. The BIOS keeps that
+`EVALUATE`'s input frame outside the return stack, so the evaluator stayed one
+level deep with a failure recorded, and at a nonzero depth with a failure
+recorded it runs no `EVALUATE`: the repeated load evaluated nothing and threw
+the old code again. Their catching words now unwind the evaluator, as
+`EVALUATE-CHECKED` does. The third expected a finished nested dependency to
+survive its parent's failure; it now expects the loader's rule, that the
+dependency is rolled back with the parent, and MegaPad's README states that
+rule. The whole system test then passed class by class, 2,236 tests in 97
+classes, each class in a process of its own; one class of network tests
+reaches 3.9 GiB and ran in two parts.
+
+Two hazards beside these stay open, and MegaPad's reference states both. An
+`ABORT` taken inside a `CATCH` leaves that frame's address in `HANDLER`, since
+the BIOS resets the stacks without telling KDOS, and a later THROW unwinds
+into the dead frame; clearing it needs a hook where the BIOS resets the
+stacks. And a word that catches across plain `EVALUATE` without unwinding the
+evaluator disables every later `EVALUATE` until an `ABORT`; a KDOS wrapper
+around `EVALUATE`, or a `CATCH` that keeps the evaluator's depth, would close
+that. Both change core words and await a decision.
 
 The ext4 driver itself loads from the boot volume on every boot, before any
 module can come from ext4. Its 22 modules are 1.39 MB of source, and loading
