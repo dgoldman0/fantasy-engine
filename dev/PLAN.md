@@ -822,6 +822,37 @@ plain files every repeated `REQUIRE` would read its file again. Through the
 hook the loader learns which file a name resolves to and skips one it has
 already loaded without reading it.
 
+The hook and Akashic's side of it are built (2026-11-10). In KDOS (MegaPad
+d8a92092) `LOAD` and `REQUIRE` find and read a file through the current module
+source, a record of four operations: resolve a path, read the file, and take
+and give back the source's current directory. KDOS's MP64FS is the source
+selected at boot, `MODULE-SOURCE!` selects another, and MegaPad's
+`docs/module-source-contract.md` is the interface. The module registry keeps
+the identity of each file whose module is loaded, so a later `REQUIRE` of that
+file ends once its path has resolved, on MP64FS as well. Akashic's
+`utils/fs/vfs-module-source.f` (fc8b0fb2) makes a mounted VFS such a source.
+Its tests load a tree of modules from an ext4 image by nested relative paths,
+also with the VFS cache limited to two entries, because a load resolves other
+modules' paths and the VFS evicts whenever a path is resolved. They run in the
+native simulator, which loads the whole ext4 driver in 0.6 s and mounts the
+volume in 0.3 s now that the driver's one anonymous definition has a name; the
+emulator takes about 1.2 billion steps to load it. One test loads the same
+tree on the emulator. Plain module files keep one rule that linked chunks
+never had to: a comment or a string closes on its own line, since KDOS
+evaluates a file a line at a time. The driver had broken it in one stack
+comment since db9cccc4, and the test of that rule had failed on main unseen
+until fc8b0fb2 put the comment on one line. At MegaPad d8a92092 and Akashic
+fc8b0fb2 the physical Desktop journey passed, and so did the 214 test units
+the changes reach.
+
+Three of MegaPad's system tests fail on main and did before this work. In
+two, a load repeated after a failed one prints nothing more, which is what an
+uncaught THROW at the prompt looks like (Part 1d); what throws there is not
+known. The third expects a finished nested dependency to survive its parent's
+failure, where KDOS.md and the loader roll it back with the parent, and
+MegaPad's README still states the older rule. Fixes for the three are in
+work.
+
 The ext4 driver itself loads from the boot volume on every boot, before any
 module can come from ext4. Its 22 modules are 1.39 MB of source, and loading
 the driver from source has taken about 1.22 billion guest steps, at least 12 s
@@ -833,7 +864,9 @@ Steps:
 2. Close the writer's alpha gaps: general allocation, renaming over an
    existing file, and folders. Prove block ownership once per mount rather
    than on every write.
-3. Teach KDOS to load modules from ext4 volumes.
+3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook
+   and Akashic's module source. To do: storage units for the system and user
+   volumes, what the boot loads from where, and the boot's measured cost.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
 
@@ -1135,10 +1168,16 @@ bitmap had been patched full with no file owning the blocks; on a volume that
 files fill to its last block, the driver answers VFS-E-NOSPC with no I/O. The
 harness had scanned the whole image a byte at a time at every guest flush,
 which was most of a write test's wall time, and now compares each chunk with
-zeros (Akashic f068fdd1). The whole test_vfs_ext4 unit has not run since these
-changes. A run at 586633db passed 254 of its 835 cases, none failing, before
-it was stopped for the host-speed work recorded in section 4, and one whole
-run closes the step.
+zeros (Akashic f068fdd1). The whole test_vfs_ext4 unit then ran at f068fdd1
+and MegaPad 7eba16c8 in 89 minutes, where it had taken 2 h 46 min: 832 cases
+passed, one was skipped and two failed. Both were rename-over tests that still
+counted a whole folder's entries in the VFS cache, which has held only the
+names a caller resolves since ext4 began to look names up one at a time
+(def0488c). They passed at the commit before it and failed from it on, and no
+slice's own run had selected them; c3d127b7 counts what the cache holds.
+The unit then passed whole at Akashic fc8b0fb2 and MegaPad d8a92092, with the
+loader hook under it, in 86 minutes. It peaks at 5.1 GiB of memory, above the
+4 GiB at which the working rules ask before a run.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
