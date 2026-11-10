@@ -766,6 +766,29 @@ from a small MP64FS boot volume (Decided, 2026-11-04), because teaching the
 BIOS ext4 would bloat it. The boot volume therefore also holds whatever KDOS
 loads before it can mount ext4.
 
+Each volume has a storage unit of its own (Decided, 2026-11-10). The boot
+volume stays on unit 0, where the BIOS reads it, and the settings volume on
+unit 1; two more units hold the system and user volumes. Each volume is then
+one image file, the BIOS boots as it does now, and no partition table comes
+between the BIOS and the boot volume. A device can map its units onto
+partitions of one medium inside the storage controller.
+
+KDOS's loader finds and reads a module through a hook, and Akashic plugs its
+VFS into that hook once the system volume is mounted (Decided, 2026-11-10).
+KDOS keeps one loader and one list of loaded modules, with the rollback after
+a failed load that it has today, and learns nothing about ext4. Today `REQUIRE`
+reads only KDOS's own MP64FS, and it reads a whole file before the file's
+`PROVIDED` line can show that the module is already loaded. The Desktop's
+linked chunks hide that, since the linker removes their `REQUIRE` lines; with
+plain files every repeated `REQUIRE` would read its file again. Through the
+hook the loader learns which file a name resolves to and skips one it has
+already loaded without reading it.
+
+The ext4 driver itself loads from the boot volume on every boot, before any
+module can come from ext4. Its 22 modules are 1.39 MB of source, and loading
+the driver from source has taken about 1.22 billion guest steps, at least 12 s
+at the SoC's 100 MHz clock. Step 3 measures what the boot then costs.
+
 Steps:
 
 1. Settle the boot path. Done: a small MP64FS boot volume.
