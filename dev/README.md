@@ -36,3 +36,5 @@ The topic files so far:
 - [ext4-applications.md](ideas/ext4-applications.md): uses of the ext4
   driver's checks, records and orphan file beyond storing files, from a
   Workshop view of a save to jobs that resume after a restart.
+- [engine-speed.md](ideas/engine-speed.md): what a November 2026 study left
+  open in the host speed of the emulator and the simulator.

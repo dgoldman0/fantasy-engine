@@ -431,8 +431,28 @@ updated for the work done since.
 The frames-follow-change plan (Akashic
 `docs/rich-terminal/FRAMES-FOLLOW-CHANGE.md`) finished on 2026-11-01 and
 landed on both components' main branches. Its worktrees and the components'
-other local branches were retired the same day, so work in `megapad/` and
-`akashic/` now happens in their main checkouts.
+other local branches were retired the same day.
+
+A study of the emulator's and the simulator's host speed on 2026-11-10 found
+neither near its limit, and its quick fixes and the simulator's engine work
+landed the same day. None of it changes what the machine does or costs. The
+emulator no longer copies its whole input journal at the end of every batch
+that staged nothing, so a line-fed KDOS load takes 1.4 s where it took 3.2 s
+(MegaPad 6b47e205). The ext4 harness finds an image's zero chunks with one
+comparison each (Akashic f068fdd1). The simulator's native engine now defines
+each operation once and compiles it for a general path and a direct path that
+uses what a run has already proved (MegaPad 17db2bb7); it runs calls to
+`CREATE ... DOES>` children itself (4d2cbd92), plans a word's operations
+faster (73bef418), and returns to its Python dispatcher eight times less
+often outside a session's quantum (7eba16c8). Its kernels run 2.0 to 8.1
+times faster with the same steps and results, the headless Desktop is ready
+in about 5.2 s where it took 6.2 s, and a typed character shows in 0.064 s
+where it took 0.085 s. At MegaPad 7eba16c8 and Akashic f068fdd1 the 272 test
+units these changes reach all passed, and so did the physical Desktop journey.
+What the study left open is in
+`ideas/engine-speed.md`: letting the emulator's translated blocks reach each
+other, which is weeks of work and not started, and the Python that still
+surrounds the simulator's engine.
 
 ## 5. Parts
 
@@ -559,14 +579,32 @@ fail on what their libraries do:
 
 The four audio suites still cannot load their modules: their lists are stale,
 and 65 REQUIRE lines in the audio modules name the wrong folder (37 write audio/
-from inside audio/, 28 name a math module bare). test_sphincs passed the first
-nine of its fifteen lighter tests before a 45-minute cap, and the other six
-together ran past a one-hour cap. Five SPHINCS+ tests have budgets of 50 to 100
-billion steps, three there and two in test_tx. The one measured,
-test_full_roundtrip, ran four hours without finishing, and the other four have
-not run. The suites' own run loops lack forth_snapshot.py's stall detection, so
-a hung load costs the tool's whole limit; moving them onto ForthSnapshot would
-remove about sixty copies of that loop.
+from inside audio/, 28 name a math module bare).
+
+The SPHINCS+ suite's long runs were a stalled machine, and the library had two
+defects (Akashic 81cec03e). SLH-DSA-SHAKE-128s could make neither a key nor a
+signature once it was loaded into the userland dictionary, which is how its
+tests load it: the BIOS's WOTS accelerator reads its context record from Bank
+0, and the module had placed that record in extended memory. Every chain was
+refused and the status thrown. An uncaught THROW at KDOS's prompt leaves the
+machine idle and silent, and the suite's own run loop went on stepping that
+machine toward a budget of 50 or 100 billion steps. With the record moved, the
+library verified only its own signatures, because three details of its hash
+addresses differed from FIPS 205. With those corrected, its key pair and its
+signature of fixed inputs are byte for byte the ones OpenSSL 3.5.2 makes, and
+it accepts OpenSSL's signature and refuses an altered one. On the emulator a
+key pair costs 142 million guest steps (2 s at the SoC's 100 MHz clock), a
+signature 1.94 billion (27 s) and a verification 2.3 million (0.03 s). The
+suite now runs on ForthSnapshot: its lighter tests take 43 seconds and the
+full roundtrip six minutes, and the transaction suite's two SPHINCS+ tests
+pass in about seven minutes each. Two tests of the refactor inventory had kept
+the import graph's counts from before 5648118e and failed on main; they expect
+the present graph (Akashic 62f42a60).
+
+The other suites' own run loops still lack forth_snapshot.py's stall
+detection, so a hung load costs the tool's whole limit; moving them onto
+ForthSnapshot would remove about sixty copies of that loop. KDOS's silence
+after an uncaught THROW at the prompt is recorded here and left as it is.
 
 **1e. Retire the old working copies.** Older copies of LM1 and of this
 repository outside the workspace hold nothing the workspace lacks once this
@@ -1051,7 +1089,7 @@ surfaced, identical at 00bccf41: a write into a file's own extent node is
 refused with the right diagnosis, but the test also expects the write's
 staging cell to name the node's block, and that cell holds zero. The last
 failure came from renaming over a file, whose new capability the binding test
-did not yet expect; Akashic 15345ea0 adds it. Eleven older failures remain.
+did not yet expect; Akashic 15345ea0 adds it. Eleven older failures remained.
 The VFS name cache now limits folder size more than the writer does. ext4 has
 no single-name lookup, so the VFS loads all of a folder's names before it
 resolves, creates, links, renames or removes one there, and its cache holds at
@@ -1081,6 +1119,26 @@ the source, which had let most MP64FS and FAT checks pass whatever the code did
 in 50 the checks count failures without raising, and 19 are script-only drivers
 that pytest and the test tool never run; most of the 69 also match text against
 the echoed source.
+
+The eleven older failures were stale tests, and closing them left the driver
+unchanged (Akashic d0219951, 7fff3f9c, 586633db). Six came from the orphan
+cleanup's crash tests, whose tables named an earlier order of the mount's
+writes. The tables now follow its 34 writes with an orphan file, its 32 with
+the legacy chain and its 24 flushes, through the landing of the empty journal,
+which had no cases before. A torn or lost last write of that landing leaves
+nothing to repair, and the next mount writes nothing. Two expected what
+recovery did before August: replay now admits a journaled superblock that
+names an orphan and leaves the mount to the orphan plan, and the retry after a
+torn journal reset flushes twice. Three expected checks that the per-mount
+ownership proof replaced. One of the three tested disk-full on a volume whose
+bitmap had been patched full with no file owning the blocks; on a volume that
+files fill to its last block, the driver answers VFS-E-NOSPC with no I/O. The
+harness had scanned the whole image a byte at a time at every guest flush,
+which was most of a write test's wall time, and now compares each chunk with
+zeros (Akashic f068fdd1). The whole test_vfs_ext4 unit has not run since these
+changes. A run at 586633db passed 254 of its 835 cases, none failing, before
+it was stopped for the host-speed work recorded in section 4, and one whole
+run closes the step.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
@@ -1500,6 +1558,10 @@ The workspace `AGENTS.md` governs this work. In short:
   quoting or narrating anyone. Commits carry the maintainer's authorship, and
   an assistant is credited only by a Co-Authored-By trailer. Never amend a
   commit; add a new one. The maintainer pushes.
+- Make each round of changes to MegaPad, Akashic or LM1 on a branch of its
+  own, in a worktree under `/dev/shm`, and merge it fast-forward into the
+  component's main once it is green. The main checkouts are not edited. Notes
+  for this plan go straight onto this repository's master.
 - Test narrowly while working: unit and focused tests, then Desk with only
   the applets a change touches. Tests run through the selection (Part 1h):
   at a slice's end, the units already on record run with the tests the
