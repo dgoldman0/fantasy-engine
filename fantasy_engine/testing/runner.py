@@ -17,6 +17,14 @@ passed tests (``recorder/fe_cases.py``) live in the unit's partial folder
 in RAM until a result is recorded.  The next run deselects those tests when
 its launch settings are the same and nothing the interrupted attempt read
 has changed since it started; otherwise the unit starts over.
+
+An attempt that started a program other than Python resumes only when every
+such program lies in a folder its repository declares (``Repo.tool_folders``):
+the repository states that those programs read only their own file and the
+files their arguments name.  Both are recorded when a program starts, so a
+changed tool or a changed file handed to it starts the unit over.  A program
+from anywhere else keeps the unit from resuming, and a unit that starts any
+program is still never skipped.
 """
 
 from __future__ import annotations
@@ -228,10 +236,17 @@ class Runner:
     def partial(self, unit: Unit) -> Path:
         return self.partial_root / hashlib.sha256(unit.id.encode()).hexdigest()[:16]
 
-    def resumable(self, partial: Path, unit: Unit, key: str) -> int:
+    def resumable(self, partial: Path, unit: Unit, key: str,
+                  tool_folders: list[Path] | tuple[Path, ...] = ()) -> int:
         """How many tests an interrupted attempt of UNIT passed, when it can
         resume: same launch key, every read recorded, and nothing it read
         changed after it stopped.  0 when there is nothing to resume.
+
+        A program the attempt started counts as read in full when it lies
+        in one of TOOL_FOLDERS, the folders the unit's repository declares;
+        its file is then checked like any other input, as the files its
+        arguments named already are.  A program from elsewhere leaves reads
+        unrecorded.
 
         The attempt's own writes, such as a new __pycache__ folder, came
         before it stopped, and a change while it ran makes its result
@@ -246,14 +261,15 @@ class Runner:
         if meta.get("unit") != unit.id or meta.get("key") != key or not passed:
             return 0
         seen = records.load(partial / "records")
-        if seen.unrecordable or seen.errors:
+        tools, unrecorded = seen.started_tools(tool_folders)
+        if unrecorded or seen.errors:
             return 0
         written = [partial / "passed", *(partial / "records").glob("*.jsonl")]
         stopped_ns = max(os.stat(path).st_mtime_ns for path in written)
         excluded = (partial, Path(meta["tmp"]), self.store.path.parent)
         inputs = seen.inputs(excluded)
         for name in (inputs.files + inputs.listings + inputs.import_listings
-                     + inputs.metadata_listings):
+                     + inputs.metadata_listings + tools):
             path = Path(name)
             while not path.exists() and path != path.parent:
                 path = path.parent
@@ -294,6 +310,7 @@ class Runner:
         key = launch_key(launch.argv, launch.cwd, env, self.python)
         if not dry_run:
             self.stop_orphan(partial)
+        tool_folders = unit.repo.tool_folders(env)
         decision = decide(unit, key, self.store)
         if decision.skip and not full:
             if not dry_run:
@@ -303,7 +320,7 @@ class Runner:
             self.say("SKIP  %s  unchanged since %s" % (
                 unit.id, self.describe_previous(decision.previous)))
             return
-        resumed = 0 if full else self.resumable(partial, unit, key)
+        resumed = 0 if full else self.resumable(partial, unit, key, tool_folders)
         note = "; resumes after %d passed tests" % resumed if resumed else ""
         if dry_run:
             summary.ran += 1
@@ -333,7 +350,11 @@ class Runner:
         seen = records.load(record)
         excluded = (tmp, partial, self.store.path.parent, logs)
         inputs = seen.inputs(excluded)
-        inputs.files = sorted(set(inputs.files) | {str(p) for p in launch.launcher_inputs})
+        # The declared tools the unit started are inputs by their files.  The
+        # unit still counts as starting programs, so it is never skipped.
+        tools, _ = seen.started_tools(tool_folders)
+        inputs.files = sorted(set(inputs.files) | set(tools)
+                              | {str(p) for p in launch.launcher_inputs})
         unrecordable = sorted(seen.unrecordable)
         if seen.errors:
             unrecordable.append("a recorder error (%s)" % seen.errors[0])

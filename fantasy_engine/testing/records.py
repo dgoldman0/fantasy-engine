@@ -31,8 +31,35 @@ class Observation:
     metadata_listings: set[str] = field(default_factory=set)
     import_names: set[str] = field(default_factory=set)
     unrecordable: set[str] = field(default_factory=set)
+    # For each unrecordable entry that is a started program, the files it
+    # ran; None stands for a start whose file could not be found.
+    started: dict[str, set[str | None]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     unfinished: int = 0
+
+    def started_tools(self, folders) -> tuple[list[str], list[str]]:
+        """Split what the run did outside the recording by FOLDERS.
+
+        Returns the files of the started programs that lie inside one of
+        FOLDERS, and the unrecordable entries that such programs do not
+        account for: a program from elsewhere, one whose file could not be
+        found, or anything else the recording could not follow.
+        """
+
+        roots = [os.path.realpath(folder) + os.sep for folder in folders]
+        tools: set[str] = set()
+        others: list[str] = []
+        for entry in sorted(self.unrecordable):
+            files = self.started.get(entry)
+            inside = files is not None and all(
+                name is not None and name.startswith(tuple(roots))
+                for name in files
+            ) and bool(roots)
+            if inside:
+                tools.update(files)  # type: ignore[arg-type]
+            else:
+                others.append(entry)
+        return sorted(tools), others
 
     def inputs(self, excluded: tuple[Path, ...]) -> "Inputs":
         """The run's inputs, leaving out its outputs and EXCLUDED trees."""
@@ -104,9 +131,10 @@ def load(record_dir: Path) -> Observation:
                 elif kind == "m":
                     seen.import_names.add(item["p"])
                 elif kind == "x":
-                    seen.unrecordable.add(
-                        "%s (%s)" % (item["p"], item.get("why", "unrecorded"))
-                    )
+                    entry = "%s (%s)" % (item["p"], item.get("why", "unrecorded"))
+                    seen.unrecordable.add(entry)
+                    if item.get("why") == "not Python":
+                        seen.started.setdefault(entry, set()).add(item.get("file"))
                 elif kind == "err":
                     seen.errors.append(item["p"])
         if not finished:

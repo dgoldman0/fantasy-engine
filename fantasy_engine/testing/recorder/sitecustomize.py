@@ -84,6 +84,57 @@ def _isolating(argv):
     return False
 
 
+def _program_file(program, env, cwd):
+    """The file a program name starts, as the system would find it, or None.
+
+    A name with a folder in it is that path, taken from the folder the
+    program starts in; a bare name is looked up along the PATH the program
+    is given.  Symbolic links are followed, so the answer names the file
+    whose content runs.
+    """
+    try:
+        base = os.path.abspath(os.fsdecode(cwd)) if cwd else os.getcwd()
+        if os.sep in program:
+            candidates = [program]
+        else:
+            folders = env.get("PATH", os.defpath).split(os.pathsep)
+            candidates = [os.path.join(folder or os.curdir, program)
+                          for folder in folders]
+        for candidate in candidates:
+            path = os.path.join(base, candidate)
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                return os.path.realpath(path)
+    except (OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def _named_files(arguments, cwd):
+    """The existing files a program's arguments name.
+
+    An argument names a file as a whole, or after an equals sign as in
+    ``--config=FILE``; a relative name is taken from the folder the program
+    starts in.  Folders, and files named inside a command string or a script,
+    are not found here.
+    """
+    try:
+        base = os.path.abspath(os.fsdecode(cwd)) if cwd else os.getcwd()
+    except (OSError, ValueError, TypeError):
+        return []
+    found = []
+    for argument in arguments:
+        for text in dict.fromkeys((argument, argument.partition("=")[2])):
+            if not text:
+                continue
+            try:
+                path = os.path.abspath(os.path.join(base, text))
+                if os.path.isfile(path):
+                    found.append(path)
+            except (OSError, ValueError):
+                continue
+    return found
+
+
 def _unwrap(base, rest, env):
     """The command a wrapper starts and its environment, or None if unknown."""
     with_argument, positionals = _WRAPPERS[base]
@@ -154,7 +205,7 @@ class _Recorder:
         os.write(self.fd, data.encode("utf-8", "surrogateescape"))
 
     def emit(self, kind, path, **extra):
-        key = (kind, path, extra.get("why"))
+        key = (kind, path, extra.get("why"), extra.get("file"))
         if key in self.seen:
             return
         self.seen.add(key)
@@ -278,8 +329,9 @@ class _Recorder:
         if event == "os.system":
             self.emit("x", "os.system", why=str(args[0])[:200])
             return
+        cwd = None
         if event == "subprocess.Popen":
-            executable, argv, _cwd, env = args[:4]
+            executable, argv, cwd, env = args[:4]
         elif event == "os.spawn":
             _mode, executable, argv, env = args[:4]
         else:
@@ -290,9 +342,10 @@ class _Recorder:
         argv = [os.fsdecode(a) if isinstance(a, bytes) else str(a) for a in argv]
         program = executable if executable is not None else (argv[0] if argv else "")
         program = os.fsdecode(program) if isinstance(program, bytes) else str(program)
-        self.classify(program, argv, dict(env) if env is not None else dict(os.environ))
+        self.classify(program, argv,
+                      dict(env) if env is not None else dict(os.environ), cwd)
 
-    def classify(self, program, argv, env):
+    def classify(self, program, argv, env, cwd=None):
         base = os.path.basename(program)
         if base in _WRAPPERS:
             inner = _unwrap(base, argv[1:], env)
@@ -300,10 +353,17 @@ class _Recorder:
                 self.emit("x", program, why="wrapper with an unknown command")
                 return
             inner_argv, inner_env = inner
-            self.classify(inner_argv[0], inner_argv, inner_env)
+            self.classify(inner_argv[0], inner_argv, inner_env, cwd)
             return
         if not _is_python(program, base):
-            self.emit("x", program, why="not Python")
+            # What the program reads by itself goes unrecorded.  The file it
+            # runs is noted, so that a run whose programs all come from
+            # folders its repository vouches for can still be resumed.
+            self.emit("x", program, why="not Python",
+                      file=_program_file(program, env, cwd))
+            # The files its arguments name are read on its behalf.
+            for path in _named_files(argv[1:], cwd):
+                self.emit("r", path)
             return
         paths = env.get("PYTHONPATH", "").split(os.pathsep)
         if env.get(RECORD_ENV) != self.record_dir or HERE not in paths:

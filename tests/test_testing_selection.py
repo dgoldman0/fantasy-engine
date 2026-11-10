@@ -236,3 +236,150 @@ def test_an_interrupted_unit_starts_over_when_an_input_changed(
     assert ran.read_text().split() == ["one", "two", "three"] * 2
     assert "resumed" not in text
     assert not summary.failed
+
+
+TOOLED = """
+    import os
+    import subprocess
+
+    def _ran(name):
+        with open(%r, "a") as log:
+            log.write(name + "\\n")
+
+    def test_one():
+        _ran("one")
+        subprocess.run([%r, "data/a.txt"], check=True)
+
+    def test_two():
+        _ran("two")
+
+    def test_three():
+        _ran("three")
+        assert not os.path.exists(%r)
+"""
+
+
+class ToolRepo(DemoRepo):
+    """A demo repository that vouches for the programs in one folder."""
+
+    def __init__(self, root, entries, folders):
+        super().__init__(root, entries)
+        self.folders = folders
+
+    def tool_folders(self, env):
+        return list(self.folders)
+
+
+@pytest.fixture
+def tooled(demo, tmp_path):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    tool = tools / "checker"
+    tool.write_text("#!/bin/sh\ntest -f \"$1\"\n")
+    tool.chmod(0o755)
+    flag = tmp_path / "store" / "fail-three"
+    ran = tmp_path / "store" / "ran.log"
+    (demo.root / "tests" / "test_t.py").write_text(
+        textwrap.dedent(TOOLED % (str(ran), str(tool), str(flag))))
+    git = ["git", "-C", str(demo.root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "tooled"], check=True)
+    flag.parent.mkdir(parents=True, exist_ok=True)
+
+    def repo(*folders):
+        vouching = ToolRepo(demo.root, demo.entries, folders)
+        unit = [u for u in vouching.units() if u.name == "tests/test_t.py"]
+        return vouching, unit
+
+    return repo, tool, flag, ran
+
+
+def interrupt_tooled(repo, unit, store, tmp_path, monkeypatch, flag):
+    flag.write_text("")
+    with monkeypatch.context() as patch:
+        interrupted_after_its_unit(patch)
+        with pytest.raises(KeyboardInterrupt):
+            run(repo, store, tmp_path, units=unit)
+    flag.unlink()
+
+
+def test_an_interrupted_unit_resumes_when_its_programs_come_from_declared_folders(
+        store, tmp_path, monkeypatch, tooled):
+    make, tool, flag, ran = tooled
+    repo, unit = make(tool.parent)
+    interrupt_tooled(repo, unit, store, tmp_path, monkeypatch, flag)
+    assert ran.read_text().split() == ["one", "two", "three"]
+
+    _, _, text = run(repo, store, tmp_path, units=unit, dry_run=True)
+    assert "resumes after 2 passed tests" in text
+    summary, _, text = run(repo, store, tmp_path, units=unit)
+    assert ran.read_text().split() == ["one", "two", "three", "three"]
+    assert "resumed after 2 passed tests" in text
+    assert not summary.failed
+
+    # The tool's file is an input of the recorded result.  The unit still
+    # starts a program, so the selection runs it every time.
+    result = store.latest_pass(unit[0].id)
+    assert str(tool.resolve()) in result.inputs["files"]
+    assert result.inputs["unrecordable"] == ["%s (not Python)" % tool]
+    _, ran_units, text = run(repo, store, tmp_path, units=unit)
+    assert ran_units == ["tests/test_t.py"]
+    assert "it starts %s (not Python)" % tool in text
+
+
+def test_a_changed_tool_starts_the_interrupted_unit_over(
+        store, tmp_path, monkeypatch, tooled):
+    make, tool, flag, ran = tooled
+    repo, unit = make(tool.parent)
+    interrupt_tooled(repo, unit, store, tmp_path, monkeypatch, flag)
+
+    tool.write_text("#!/bin/sh\ntest -f \"$1\" && true\n")
+    _, _, text = run(repo, store, tmp_path, units=unit, dry_run=True)
+    assert "resumes" not in text
+    summary, _, text = run(repo, store, tmp_path, units=unit)
+    assert ran.read_text().split() == ["one", "two", "three"] * 2
+    assert "resumed" not in text
+    assert not summary.failed
+
+
+def test_a_changed_file_handed_to_the_tool_starts_the_unit_over(
+        demo, store, tmp_path, monkeypatch, tooled):
+    make, tool, flag, ran = tooled
+    repo, unit = make(tool.parent)
+    interrupt_tooled(repo, unit, store, tmp_path, monkeypatch, flag)
+
+    # Only the tool read data/a.txt: the test names it on the command line.
+    (demo.root / "data" / "a.txt").write_text("a2")
+    summary, _, text = run(repo, store, tmp_path, units=unit)
+    assert ran.read_text().split() == ["one", "two", "three"] * 2
+    assert "resumed" not in text
+    assert not summary.failed
+
+
+def test_a_program_from_an_undeclared_folder_keeps_the_unit_from_resuming(
+        store, tmp_path, monkeypatch, tooled):
+    make, tool, flag, ran = tooled
+    # No folder declared, then a folder that does not hold the tool.
+    for folders in ((), (tmp_path / "store",)):
+        repo, unit = make(*folders)
+        interrupt_tooled(repo, unit, store, tmp_path, monkeypatch, flag)
+        _, _, text = run(repo, store, tmp_path, units=unit, dry_run=True)
+        assert "resumes" not in text
+        summary, _, text = run(repo, store, tmp_path, units=unit)
+        assert "resumed" not in text
+        assert not summary.failed
+    assert ran.read_text().split() == ["one", "two", "three"] * 4
+
+
+def test_akashic_declares_the_folder_its_tool_variable_names(tmp_path):
+    from fantasy_engine.testing.suites import AkashicRepo, Repo
+
+    repo = AkashicRepo(tmp_path / "akashic", tmp_path / "megapad")
+    assert repo.tool_folders({}) == []
+    assert repo.tool_folders({"AKASHIC_E2FSPROGS_TOOL_DIR": ""}) == []
+    assert repo.tool_folders(
+        {"AKASHIC_E2FSPROGS_TOOL_DIR": "/opt/e2fsprogs/sbin"}
+    ) == [tmp_path.__class__("/opt/e2fsprogs/sbin")]
+    # A repository declares nothing unless it says so.
+    assert Repo(tmp_path).tool_folders(
+        {"AKASHIC_E2FSPROGS_TOOL_DIR": "/opt/e2fsprogs/sbin"}) == []

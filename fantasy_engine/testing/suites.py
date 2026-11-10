@@ -132,6 +132,26 @@ class Repo:
     def launch(self, unit: Unit, python: str) -> Launch:
         raise NotImplementedError
 
+    def tool_folders(self, env: dict[str, str]) -> list[Path]:
+        """Folders of programs this repository vouches for, given a unit's
+        environment.
+
+        The recording sees that a unit starts a program and not what the
+        program reads, so a unit that starts one cannot be resumed: nothing
+        shows that what the interrupted attempt read is unchanged.  A
+        repository lifts that for the programs in the folders it returns
+        here by stating that each reads only its own file and the files its
+        arguments name.  The recorder notes both when the program starts, so
+        they are inputs of the unit like any file a Python process reads.
+
+        The statement is the repository's to make and to keep true.  A
+        program that finds files by itself, as git finds its repository and
+        a TeX engine its packages, does not belong in such a folder.  A file
+        that a tool reads because its environment or a command script names
+        it has to be read by the tests as well, or it is no input.
+        """
+        return []
+
     def outcome(self, returncode: int) -> str:
         return "passed" if returncode == 0 else "failed"
 
@@ -181,6 +201,15 @@ class AkashicRepo(PytestRepo):
     name = "akashic"
     test_dir = "local_testing"
 
+    # The ext4 tests run the pinned e2fsprogs build that this variable names,
+    # on images and command files they wrote.  Its tools read their own
+    # files, their arguments, and the mke2fs configuration their environment
+    # names, which the tests hash against the profile's manifest and so read
+    # themselves.  Declaring the folder by the variable the tests take it
+    # from keeps the declaration on the folder they run from, and the
+    # variable is part of the launch key, so another folder is another launch.
+    TOOL_FOLDER_VARIABLES = ("AKASHIC_E2FSPROGS_TOOL_DIR",)
+
     def __init__(self, root: Path, megapad_root: Path):
         super().__init__(root)
         self.megapad_root = Path(megapad_root)
@@ -188,6 +217,10 @@ class AkashicRepo(PytestRepo):
     def pythonpath(self) -> list[Path]:
         # Some tests import MegaPad modules before the harness adds MegaPad.
         return [self.megapad_root]
+
+    def tool_folders(self, env: dict[str, str]) -> list[Path]:
+        return [Path(env[name]) for name in self.TOOL_FOLDER_VARIABLES
+                if env.get(name)]
 
 
 class FantasyEngineRepo(PytestRepo):
