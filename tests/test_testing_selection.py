@@ -79,10 +79,11 @@ def store(tmp_path):
     store.close()
 
 
-def run(repo, store, tmp_path, **options):
+def run(repo, store, tmp_path, units=None, **options):
     out = io.StringIO()
-    runner = Runner(store, repos=[repo], out=out, scratch=tmp_path / "scratch")
-    summary = runner.run(repo.units(), **options)
+    runner = Runner(store, repos=[repo], out=out, scratch=tmp_path / "scratch",
+                    partial_root=tmp_path / "partial")
+    summary = runner.run(repo.units() if units is None else units, **options)
     lines = out.getvalue().splitlines()
     ran = sorted(line.split()[1].split(":", 1)[1] for line in lines
                  if line.startswith(("RUN ", "RUN?")))
@@ -151,3 +152,87 @@ def test_a_dry_run_reports_without_running(demo, store, tmp_path):
     assert ran == ["tests/test_b.py", "tests/test_d.py"]
     assert "RUN?  demo:tests/test_b.py  changed:" in text
     assert store.latest("demo:tests/test_b.py").run_id == before
+
+
+RESUMABLE = """
+    import os
+
+    def _ran(name):
+        with open(%r, "a") as log:
+            log.write(name + "\\n")
+
+    def test_one():
+        _ran("one")
+        assert open("data/a.txt").read() in ("a", "a2")
+
+    def test_two():
+        _ran("two")
+
+    def test_three():
+        _ran("three")
+        assert not os.path.exists(%r)
+"""
+
+
+def interrupted_after_its_unit(monkeypatch):
+    """The session ends right after the unit's process does."""
+    real = Runner.execute
+
+    def execute(self, launch, env, log_path, pid_path=None):
+        real(self, launch, env, log_path, pid_path=pid_path)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(Runner, "execute", execute)
+
+
+@pytest.fixture
+def resumable(demo, tmp_path):
+    # The log and the flag sit beside the store, whose folder the recording
+    # leaves out, so neither counts as an input of the unit.
+    flag = tmp_path / "store" / "fail-three"
+    ran = tmp_path / "store" / "ran.log"
+    (demo.root / "tests" / "test_r.py").write_text(
+        textwrap.dedent(RESUMABLE % (str(ran), str(flag))))
+    git = ["git", "-C", str(demo.root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "resumable"], check=True)
+    unit = [u for u in demo.units() if u.name == "tests/test_r.py"]
+    return unit, flag, ran
+
+
+def test_an_interrupted_unit_resumes_after_its_passed_tests(
+        demo, store, tmp_path, monkeypatch, resumable):
+    unit, flag, ran = resumable
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("")
+    with monkeypatch.context() as patch:
+        interrupted_after_its_unit(patch)
+        with pytest.raises(KeyboardInterrupt):
+            run(demo, store, tmp_path, units=unit)
+    assert ran.read_text().split() == ["one", "two", "three"]
+
+    flag.unlink()
+    summary, _, text = run(demo, store, tmp_path, units=unit, dry_run=True)
+    assert "resumes after 2 passed tests" in text
+    summary, _, text = run(demo, store, tmp_path, units=unit)
+    assert ran.read_text().split() == ["one", "two", "three", "three"]
+    assert "passed" in text and "resumed after 2 passed tests" in text
+    assert not summary.failed
+    assert not any((tmp_path / "partial").iterdir())
+
+
+def test_an_interrupted_unit_starts_over_when_an_input_changed(
+        demo, store, tmp_path, monkeypatch, resumable):
+    unit, flag, ran = resumable
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("")
+    with monkeypatch.context() as patch:
+        interrupted_after_its_unit(patch)
+        with pytest.raises(KeyboardInterrupt):
+            run(demo, store, tmp_path, units=unit)
+    flag.unlink()
+    (demo.root / "data" / "a.txt").write_text("a2")
+    summary, _, text = run(demo, store, tmp_path, units=unit)
+    assert ran.read_text().split() == ["one", "two", "three"] * 2
+    assert "resumed" not in text
+    assert not summary.failed

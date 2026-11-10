@@ -10,6 +10,13 @@ a different result reveals an input the recording missed.
 
 Units run sequentially, each in a process of its own, with throwaway files
 in /dev/shm, which is RAM, and a pinned PYTHONHASHSEED.
+
+A unit whose run was interrupted, as when the session running it ends,
+resumes after the tests it passed.  The recorder's records and the list of
+passed tests (``recorder/fe_cases.py``) live in the unit's partial folder
+in RAM until a result is recorded.  The next run deselects those tests when
+its launch settings are the same and nothing the interrupted attempt read
+has changed since it started; otherwise the unit starts over.
 """
 
 from __future__ import annotations
@@ -28,6 +35,7 @@ from pathlib import Path
 from typing import TextIO
 
 from . import records
+from .recorder.fe_cases import PASSED_ENV, RESUME_ENV
 from .store import Result, Store
 from .suites import Repo, Unit
 
@@ -45,7 +53,7 @@ _PASSED_PREFIXES = ("LC_", "MP64_", "MEGAPAD_", "MEGAFORTH_", "AKASHIC_", "LM1_"
 _UNKEYED = frozenset(("PATH", "TERM", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",
                       "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE",
                       "DBUS_SESSION_BUS_ADDRESS", "TMPDIR",
-                      "FE_TESTSEL_RECORD_DIR"))
+                      "FE_TESTSEL_RECORD_DIR", PASSED_ENV, RESUME_ENV))
 _KEYED_PROGRAMS = ("python3", "python", "make")
 
 
@@ -138,7 +146,7 @@ class Summary:
 class Runner:
     def __init__(self, store: Store, *, repos: list[Repo], out: TextIO = sys.stdout,
                  python: str = sys.executable, scratch: Path | None = None,
-                 timeout: float | None = None):
+                 timeout: float | None = None, partial_root: Path | None = None):
         self.store = store
         self.repos = repos
         self.out = out
@@ -147,6 +155,12 @@ class Runner:
         # them, sit below TMPDIR, and socket paths are limited to 108 bytes.
         self.scratch = Path(scratch) if scratch is not None else RAM / ("fet-%d" % os.getpid())
         self.timeout = timeout
+        # Interrupted units' partial attempts outlive the run, one folder per
+        # record, so that two records never resume each other's units.
+        if partial_root is None:
+            tag = hashlib.sha256(str(store.path).encode()).hexdigest()[:12]
+            partial_root = RAM / "fe-test-partial" / tag
+        self.partial_root = Path(partial_root)
         self.heads: dict[str, str] = {}
 
     def say(self, text: str) -> None:
@@ -211,36 +225,113 @@ class Runner:
         env["FE_TESTSEL_RECORD_DIR"] = str(record)
         return env
 
+    def partial(self, unit: Unit) -> Path:
+        return self.partial_root / hashlib.sha256(unit.id.encode()).hexdigest()[:16]
+
+    def resumable(self, partial: Path, unit: Unit, key: str) -> int:
+        """How many tests an interrupted attempt of UNIT passed, when it can
+        resume: same launch key, every read recorded, and nothing it read
+        changed after it stopped.  0 when there is nothing to resume.
+
+        The attempt's own writes, such as a new __pycache__ folder, came
+        before it stopped, and a change while it ran makes its result
+        unsettled when the unit finishes.  A read of a path that does not
+        exist counts as unchanged while the folder that would hold it does.
+        """
+        try:
+            meta = json.loads((partial / "meta.json").read_text())
+            passed = set((partial / "passed").read_text().split())
+        except (OSError, ValueError):
+            return 0
+        if meta.get("unit") != unit.id or meta.get("key") != key or not passed:
+            return 0
+        seen = records.load(partial / "records")
+        if seen.unrecordable or seen.errors:
+            return 0
+        written = [partial / "passed", *(partial / "records").glob("*.jsonl")]
+        stopped_ns = max(os.stat(path).st_mtime_ns for path in written)
+        excluded = (partial, Path(meta["tmp"]), self.store.path.parent)
+        inputs = seen.inputs(excluded)
+        for name in (inputs.files + inputs.listings + inputs.import_listings
+                     + inputs.metadata_listings):
+            path = Path(name)
+            while not path.exists() and path != path.parent:
+                path = path.parent
+            try:
+                if os.stat(path).st_ctime_ns > stopped_ns:
+                    return 0
+            except OSError:
+                return 0
+        return len(passed)
+
+    @staticmethod
+    def stop_orphan(partial: Path) -> None:
+        """End a unit an interrupted run left running, so that it never runs
+        twice at once.  Units run in sessions of their own, which outlive
+        the run that started them."""
+        try:
+            pid = int((partial / "pid").read_text())
+            environ = Path("/proc/%d/environ" % pid).read_bytes()
+        except (OSError, ValueError):
+            return
+        if ("%s=%s" % (PASSED_ENV, partial / "passed")).encode() not in environ:
+            return  # the number now belongs to another program
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        while Path("/proc/%d" % pid).exists():
+            time.sleep(0.05)
+
     def one(self, unit: Unit, run_id: str, *, full: bool, dry_run: bool,
             summary: Summary) -> None:
         launch = unit.repo.launch(unit, self.python)
-        tmp, record = self.scratch / "t", self.scratch / "r"
+        tmp = self.scratch / "t"
+        partial = self.partial(unit)
+        record, passed = partial / "records", partial / "passed"
         env = self.environment(launch, tmp, record)
+        env[PASSED_ENV] = str(passed)
         key = launch_key(launch.argv, launch.cwd, env, self.python)
+        if not dry_run:
+            self.stop_orphan(partial)
         decision = decide(unit, key, self.store)
         if decision.skip and not full:
+            if not dry_run:
+                shutil.rmtree(partial, ignore_errors=True)
             summary.skipped += 1
             summary.skipped_seconds += decision.previous.duration
             self.say("SKIP  %s  unchanged since %s" % (
                 unit.id, self.describe_previous(decision.previous)))
             return
+        resumed = 0 if full else self.resumable(partial, unit, key)
+        note = "; resumes after %d passed tests" % resumed if resumed else ""
         if dry_run:
             summary.ran += 1
-            self.say("RUN?  %s  %s" % (unit.id, decision.reason))
+            self.say("RUN?  %s  %s%s" % (unit.id, decision.reason, note))
             return
 
-        for folder in (tmp, record):
-            shutil.rmtree(folder, ignore_errors=True)
-            folder.mkdir(parents=True)
+        if resumed:
+            started_ns = json.loads((partial / "meta.json").read_text())["started_ns"]
+            env[RESUME_ENV] = str(passed)
+        else:
+            shutil.rmtree(partial, ignore_errors=True)
+            record.mkdir(parents=True)
+            started_ns = time.time_ns()
+            (partial / "meta.json").write_text(json.dumps({
+                "unit": unit.id, "key": key, "started_ns": started_ns,
+                "tmp": str(tmp)}))
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
         logs = self.logs_root / run_id
         logs.mkdir(parents=True, exist_ok=True)
         log_path = logs / (unit.id.replace("/", "_").replace(":", "__") + ".log")
-        started_ns = time.time_ns()
-        returncode, peak_kib = self.execute(launch, env, log_path)
-        duration = (time.time_ns() - started_ns) / 1e9
+        attempt_ns = time.time_ns()
+        returncode, peak_kib = self.execute(launch, env, log_path,
+                                            pid_path=partial / "pid")
+        duration = (time.time_ns() - attempt_ns) / 1e9
 
         seen = records.load(record)
-        excluded = (tmp, record, self.store.path.parent, logs)
+        excluded = (tmp, partial, self.store.path.parent, logs)
         inputs = seen.inputs(excluded)
         inputs.files = sorted(set(inputs.files) | {str(p) for p in launch.launcher_inputs})
         unrecordable = sorted(seen.unrecordable)
@@ -252,21 +343,28 @@ class Runner:
         moved = self.changed_during(inputs, started_ns)
 
         outcome = unit.repo.outcome(returncode)
+        if resumed and outcome == "empty":
+            outcome = "passed"  # its interrupted attempt passed every test
         note = "" if not moved else "inputs changed while it ran: %s" % moved[0]
         if moved and outcome in ("passed", "empty"):
             outcome = "unsettled"
             summary.unsettled.append(unit.id)
         self.store.record(Result(unit.id, run_id, outcome, duration, time.time(),
                                  key, described, note))
+        shutil.rmtree(partial, ignore_errors=True)
         summary.ran += 1
         summary.ran_seconds += duration
         detail = "%s in %.1f s, peak %d MiB" % (outcome, duration, peak_kib // 1024)
+        if resumed:
+            detail += ", resumed after %d passed tests" % resumed
         if outcome in ("passed", "empty"):
             summary.passed += 1
             log_path.unlink(missing_ok=True)
         elif outcome == "failed":
             summary.failed.append(unit.id)
             detail = "FAILED (exit %d) in %.1f s; log %s" % (returncode, duration, log_path)
+            if resumed:
+                detail += "; resumed after %d passed tests" % resumed
             if full and decision.skip:
                 summary.missed.append(unit.id)
                 detail += "; MISSED INPUT: the selection would have skipped it"
@@ -274,12 +372,15 @@ class Runner:
             detail += "; %s" % note
         self.say("RUN   %s  %s -> %s" % (unit.id, decision.reason, detail))
 
-    def execute(self, launch, env: dict[str, str], log_path: Path) -> tuple[int, int]:
+    def execute(self, launch, env: dict[str, str], log_path: Path,
+                pid_path: Path | None = None) -> tuple[int, int]:
         with open(log_path, "wb") as log:
             process = subprocess.Popen(
                 launch.argv, cwd=launch.cwd, env=env, stdin=subprocess.DEVNULL,
                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
             )
+            if pid_path is not None:
+                pid_path.write_text(str(process.pid))
             deadline = None if self.timeout is None else time.monotonic() + self.timeout
             try:
                 while True:

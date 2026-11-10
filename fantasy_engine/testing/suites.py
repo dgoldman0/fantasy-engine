@@ -161,8 +161,10 @@ class PytestRepo(Repo):
 
     def launch(self, unit: Unit, python: str) -> Launch:
         # The cache plugin would read and rewrite .pytest_cache on every run.
+        # fe_cases records each passing test, so an interrupted unit resumes.
         return Launch(
-            argv=[python, "-m", "pytest", "-q", "-p", "no:cacheprovider", unit.name],
+            argv=[python, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                  "-p", "fe_cases", unit.name],
             cwd=self.root,
             pythonpath=self.pythonpath(),
         )
@@ -202,7 +204,8 @@ class MegaPadRepo(Repo):
     built once before a run and each unit tells make to take it as built
     (``-o accel``).  pytest's cache plugin rewrites a file of every test ID it
     has seen, about 1 MB here, so each unit passes the Makefile's own pytest
-    settings back with that plugin turned off.
+    settings back with that plugin turned off, and with fe_cases, which
+    records each passing test so that an interrupted unit resumes.
     """
 
     name = "megapad"
@@ -212,14 +215,16 @@ class MegaPadRepo(Repo):
         self._pytest_settings: str | None = None
 
     def pytest_settings(self) -> str:
-        """PYTEST_CONFIG_ARGS as the Makefile sets it, with the cache off."""
+        """PYTEST_CONFIG_ARGS as the Makefile sets it, with the cache off and
+        fe_cases on."""
         if self._pytest_settings is None:
             printed = subprocess.run(
                 ["make", "-s", "--no-print-directory", "--eval",
                  "fe-print-%: ; @echo $($*)", "fe-print-PYTEST_CONFIG_ARGS"],
                 cwd=self.root, check=True, capture_output=True, text=True,
             ).stdout.strip()
-            self._pytest_settings = ("%s -p no:cacheprovider" % printed).strip()
+            self._pytest_settings = (
+                "%s -p no:cacheprovider -p fe_cases" % printed).strip()
         return self._pytest_settings
 
     def prepare(self, env: dict[str, str]) -> None:
