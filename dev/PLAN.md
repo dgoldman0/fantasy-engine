@@ -621,22 +621,13 @@ step 4 covers every test file of MegaPad, Akashic and this repository and
 every LM1 batch: 323, 544, 2 and 39 units. Decision 35's 35 units form the
 `outside` set, MegaPad's system test the `final` set that the release's
 final run adds, and the remaining 872 units the `release` set that runs
-with each change. Akashic's canonical Desktop no longer composes Sound Lab
-(Akashic bb0b327b), and its journey runs Sound Lab's stages only when the
-Desktop does; the checks of Desk with Sound Lab or Observatory alone moved
-into a test file of their own in the `outside` set. Step 6 is done: Section
-7 and the workspace AGENTS.md now send tests through the selection. The
-standalone journeys aren't units yet: the physical driver runs `git` to
-bind its evidence to the trees, and a unit that starts a program other
-than Python always runs, so the journeys need a way to keep that binding
-out of their keys. Two writes per MegaPad invocation came
-to light:
-the Makefile's accelerator step copies its 3 MB library into place even
-when nothing changed, and pytest's cache plugin rewrote a 1.1 MB file of
-test IDs. The tool builds the accelerator once per run and turns the cache
-off, which brings a MegaPad unit from about 4.5 MB of writes to about
-0.2 MB. Proposed: MegaPad's `accel` target writes nothing when the library
-is current, which removes the remaining copy from every test target.
+with each change. Step 6 is done: Section 7 and the workspace AGENTS.md now
+send tests through the selection. The standalone journeys aren't units yet:
+the physical driver runs `git` to bind its evidence to the trees, and a unit
+that starts a program other than Python always runs, so the journeys need a
+way to keep that binding out of their keys. The tool builds MegaPad's
+accelerator once per run and turns pytest's cache off, which brings a MegaPad
+unit from about 4.5 MB of writes to about 0.2 MB.
 
 A unit that starts programs other than Python resumes as well, when its
 repository names the folders those programs come from and vouches that each
