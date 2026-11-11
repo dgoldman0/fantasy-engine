@@ -753,6 +753,18 @@ from a small MP64FS boot volume (Decided, 2026-11-04), because teaching the
 BIOS ext4 would bloat it. The boot volume therefore also holds whatever KDOS
 loads before it can mount ext4.
 
+Applets see the volumes as places (Decided, 2026-11-11). A place is a
+folder of a volume, with a name and with what may be done there. File
+Explorer and Pad list the places they are given, and files copy from one
+volume to another. A Practice sets which places its applets see and whether
+they may write there (Part 5b), and the software handles several volumes
+even where a configuration shows one.
+
+The writer makes an inode group ready when it first needs one, as it does a
+block group (Decided, 2026-11-11). Until then a volume takes only the files
+of the groups its builder made ready, about 500 on a volume from `mke2fs`,
+whatever its size.
+
 Each volume has a storage unit of its own (Decided, 2026-11-10). The boot
 volume stays on unit 0, where the BIOS reads it, and the settings volume on
 unit 1; two more units hold the system and user volumes. Each volume is then
@@ -828,7 +840,10 @@ Steps:
 Done when the canonical Desktop boots from an ext4 system volume that holds
 its modules as individual files, a user volume takes everyday writes and
 passes the host's `e2fsck`, also after a run killed mid-write, and the
-physical journey passes.
+physical journey passes. A killed run passes in two ways (Decided,
+2026-11-11): the machine's own next mount recovers the volume and the
+host's check is clean, and the host's tools recover the killed image
+themselves, as standard ext4 promises whoever moves the medium to a PC.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
