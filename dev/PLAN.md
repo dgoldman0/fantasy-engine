@@ -603,9 +603,7 @@ the present graph (Akashic 62f42a60).
 
 The other suites' own run loops still lack forth_snapshot.py's stall
 detection, so a hung load costs the tool's whole limit; moving them onto
-ForthSnapshot would remove about sixty copies of that loop. KDOS no longer
-goes silent after an uncaught THROW: it prints `uncaught THROW` with the code
-and returns to the prompt (MegaPad 1f4030a7).
+ForthSnapshot would remove about sixty copies of that loop.
 
 **1e. Retire the old working copies.** Older copies of LM1 and of this
 repository outside the workspace hold nothing the workspace lacks once this
@@ -711,27 +709,10 @@ off, which brings a MegaPad unit from about 4.5 MB of writes to about
 0.2 MB. Proposed: MegaPad's `accel` target writes nothing when the library
 is current, which removes the remaining copy from every test target.
 
-A unit that starts programs resumes when its repository vouches for them
-(Decided, 2026-11-10; 79c1cf4). A pytest unit cut off midway resumes after the
-tests it passed (53ec37d), but the recording sees that a program other than
-Python started and not what it read, so such a unit always ran from its
-start. Each repository now names the tool folders whose programs read only
-their own file and the files their arguments name. The recorder notes both
-when such a program starts, which makes them inputs of the unit like any file
-Python reads. Akashic names the folder of the pinned e2fsprogs, by the
-variable its tests take it from, and the ext4 unit starts nothing else; it is
-the one unit long enough for resume to matter. A program from anywhere else
-still keeps its unit from resuming: `git`, the TeX and PDF tools, and the
-`cp` in the module-source unit.
-
-A machine of the simulator's native engine was never freed, and now is
-(MegaPad c723d121). The extension's classes own Python references that lead
-back to the machine, and Python's collector could not see through them, so
-every machine a process made stayed with its memory. One test file makes
-2,880 machines and passed 4 GiB in a process of its own, and the whole
-simulator suite in one process reached 7 GiB. The three classes now take part
-in cycle collection. That file peaks at 89 MiB, and the largest process of
-the simulator suite, run in eight groups, at 126 MiB where it was 978 MiB.
+A unit that starts programs other than Python resumes as well, when its
+repository names the folders those programs come from and vouches that each
+reads only its own file and the files its arguments name (Decided,
+2026-11-10). Akashic names the folder of its pinned e2fsprogs.
 
 ### Part 2. Storage: ext4
 
@@ -834,98 +815,6 @@ one image file, the BIOS boots as it does now, and no partition table comes
 between the BIOS and the boot volume. A device can map its units onto
 partitions of one medium inside the storage controller.
 
-The two units are built (2026-11-10; MegaPad f69a52f8, b949a08c and 54b49bf6).
-The machine has four storage controllers of one design: unit 0 the boot disk
-at MMIO +0x0200, unit 1 the settings disk at +0x0280, unit 2 the system disk
-at +0x0D00 and unit 3 the user disk at +0x0D80. The settings and system disks'
-media are write-protected. One table in MegaPad's `shared/storage.py` defines
-the units for the emulator, the simulator and the host's options
-(`--system-storage`, `--user-storage`); the BIOS's unit words and KDOS's
-`BOOT-UNIT`, `SETTINGS-UNIT`, `SYSTEM-UNIT` and `USER-UNIT` name the same
-four; and the RTL generates one controller per unit behind an arbiter that
-takes any number of masters. "System" now names unit 2 only: unit 0 is the
-boot disk in code and documents, and KDOS's raw singletons for it are
-`BOOT-BD` and `BOOT-RAW-VOLUME`.
-
-Building them exposed a fault the settings disk had carried since e5b4ae34.
-With two controllers active at once under strict cycles a run stopped,
-because each controller numbers its own beats and the shared port passed
-those numbers on; the port now numbers the beats it offers. Two questions are
-left for the hardware. The RTL gives each unit an SD slot of its own, as the
-settings disk has, where a device may instead map units onto partitions of
-one medium; and the emulator grants the shared port in unit order where the
-RTL rotates the grant.
-
-Akashic's `utils/fs/system-volume.f` (14f39dec) is the piece of a boot that
-uses unit 2. `SYSVOL-MOUNT` mounts the system disk's ext4 volume read-only
-from an arena the boot supplies and fills a module source for it, which the
-boot hands to KDOS's `MODULE-SOURCE!`. Its tests run that sequence in the
-simulator and on the emulator and load a tree of modules by path from the
-third unit. Before the merge the units and the rename passed the emulator
-files the change reaches, every class of the system test and the simulator
-suite on both executors, 8,884 tests, and the RTL benches. On the merged
-state (MegaPad c723d121, Akashic 14f39dec) the physical Desktop journey
-passed, and so did 275 test units and the ext4 sample of 65 tests.
-
-The Desktop boots from the system volume as an option of the image builder
-(Akashic 6832aa50 and 8c06d3f3). `--system-volume` puts a profile's modules on
-an ext4 image beside the boot image, each a plain file with the repository's
-text. The boot volume keeps KDOS, its system modules, the resources and the
-samples, and holds the closure of the mounting module in place of the
-profile's modules, deployed as the profile deploys source. `autoexec.f` loads
-that closure, mounts the volume, selects it as the module source and then
-runs the profile's own `REQUIRE` lines. The image is made with the pinned
-e2fsprogs from the ext4 fixtures' profile and sized from its content. Two
-rules of the driver set its smallest size: every block group carries a full
-group's inode table, and a mount takes the second group's backup superblock
-as its journal witness, a read-only mount included. A volume of 4 KiB blocks
-is therefore at least 131 MiB, where the modules need 18 MiB. The option is
-off unless given. A default build is unchanged: the boot images of five
-profiles hold the same files as before. On the merged state (Akashic
-8c06d3f3) the unchanged journey passed, and so did the 27 test units the
-change reaches and the ext4 sample.
-
-Measured for `desktop-apt1` on the emulator, from reset to entering Desk
-(MegaPad c723d121), in millions of instructions:
-
-| Phase | Linked chunks | System volume |
-|---|---|---|
-| BIOS and KDOS | 56 | 56 |
-| networking, rich terminal, cold-source loader | 294 | 292 |
-| the volume's driver, 24 modules in 8 chunks | | 404 |
-| the mount | | 12 |
-| the profile's 310 modules | 2,642 | 3,558 |
-| the rest | under 2 | 2 |
-| total | 2,992 | 4,324 |
-
-In system cycles the totals are 3,716 M and 5,388 M, 37 and 54 seconds at
-the SoC's 100 MHz. The modules are 52 chunks of 6.32 MB compacted source in
-one column and 309 files of 9.53 MB in the other. KDOS's loader spends about
-15,000 instructions on a line whether it holds code or a comment, in both
-boots, so the plain files' 53,000 comment and blank lines are most of the
-difference: the same modules compacted on the volume loaded in 812 M fewer.
-Resolving all 310 paths and reading every file through ext4 costs about
-200 M. The driver has no block cache and asked the disk for 11,986 single
-blocks, which the emulator does not charge as a card would. With 1 KiB blocks
-the volume is 16 MiB and the boot 444 M longer. In the simulator the boot
-takes 9.3 s where the linked one takes 2.5 s, host time only. The mount used
-190,640 bytes of its 524,288-byte arena.
-
-The physical journey passes its first 27 stages with the option and stops at
-File Explorer's wheel step, which needs a root listing three rows longer than
-its table shows. The 52 chunk files in the boot volume's root had supplied
-those rows without the step naming them. In a build made only to check this,
-with the root padded to its usual length, the whole journey passed with the
-modules loaded from the system volume. What that step scrolls once the chunks
-are gone awaits a decision, and so does making the option the default.
-
-What would cut the boot's cost, in the order the measurements suggest: the
-loader skipping comment and blank lines (up to 0.8 G, bounded by the
-compacted run); the per-line cost itself, which is nearly all of both boots
-and needs a profile first; loading only the driver's read-only part at boot
-(most of 404 M); and a cache for the driver's metadata blocks with data read
-in extent runs (reads fall below a thousand).
-
 KDOS's loader finds and reads a module through a hook, and Akashic plugs its
 VFS into that hook once the system volume is mounted (Decided, 2026-11-10).
 KDOS keeps one loader and one list of loaded modules, with the rollback after
@@ -936,86 +825,6 @@ linked chunks hide that, since the linker removes their `REQUIRE` lines; with
 plain files every repeated `REQUIRE` would read its file again. Through the
 hook the loader learns which file a name resolves to and skips one it has
 already loaded without reading it.
-
-The hook and Akashic's side of it are built (2026-11-10). In KDOS (MegaPad
-d8a92092) `LOAD` and `REQUIRE` find and read a file through the current module
-source, a record of four operations: resolve a path, read the file, and take
-and give back the source's current directory. KDOS's MP64FS is the source
-selected at boot, `MODULE-SOURCE!` selects another, and MegaPad's
-`docs/module-source-contract.md` is the interface. The module registry keeps
-the identity of each file whose module is loaded, so a later `REQUIRE` of that
-file ends once its path has resolved, on MP64FS as well. Akashic's
-`utils/fs/vfs-module-source.f` (fc8b0fb2) makes a mounted VFS such a source.
-Its tests load a tree of modules from an ext4 image by nested relative paths,
-also with the VFS cache limited to two entries, because a load resolves other
-modules' paths and the VFS evicts whenever a path is resolved. They run in the
-native simulator, which loads the whole ext4 driver in 0.6 s and mounts the
-volume in 0.3 s now that the driver's one anonymous definition has a name; the
-emulator takes about 1.2 billion steps to load it. The simulator has since
-gained `:NONAME` itself (MegaPad 488b6b23), with anonymous bodies run by its
-reference interpreter. One test loads the same
-tree on the emulator. Plain module files keep one rule that linked chunks
-never had to: a comment or a string closes on its own line, since KDOS
-evaluates a file a line at a time. The driver had broken it in one stack
-comment since db9cccc4, and the test of that rule had failed on main unseen
-until fc8b0fb2 put the comment on one line. At MegaPad d8a92092 and Akashic
-fc8b0fb2 the physical Desktop journey passed, and so did the 214 test units
-the changes reach.
-
-Three of MegaPad's system tests had failed on main since October, and none
-showed a loader defect (MegaPad e42b0d1c). Two caught a failed load's THROW
-across a plain `EVALUATE` with a `CATCH` of their own. The BIOS keeps that
-`EVALUATE`'s input frame outside the return stack, so the evaluator stayed one
-level deep with a failure recorded, and at a nonzero depth with a failure
-recorded it runs no `EVALUATE`: the repeated load evaluated nothing and threw
-the old code again. Their catching words now unwind the evaluator, as
-`EVALUATE-CHECKED` does. The third expected a finished nested dependency to
-survive its parent's failure; it now expects the loader's rule, that the
-dependency is rolled back with the parent, and MegaPad's README states that
-rule. The whole system test then passed class by class, 2,236 tests in 97
-classes, each class in a process of its own; one class of network tests
-reaches 3.9 GiB and ran in two parts. The whole ext4 unit passed on that state
-as well (MegaPad e42b0d1c, Akashic fc8b0fb2), in 97 minutes at a peak of
-5.1 GiB.
-
-The two hazards those tests exposed are closed in KDOS (Decided, 2026-11-10;
-MegaPad 2e5d8c99 and 7cd045ed). An `ABORT` taken inside a `CATCH` used to
-leave that frame's address in `HANDLER`, since the BIOS reset the stacks
-without telling KDOS, and a later THROW unwound into the dead frame. BIOS
-`QUIT`, where `ABORT` and `ABORT"` end, now runs a callback once it has reset
-the return stack (`QUIT-XT!`), and KDOS installs one that clears its exception
-chain. And a THROW that crossed plain `EVALUATE` used to leave the evaluator
-one level deep, which disabled every later `EVALUATE` until an `ABORT`. KDOS
-now shadows `EVALUATE` with a word that runs the BIOS word under `CATCH`,
-gives the evaluator its depth back when an exception passes, and rethrows;
-`EVALUATE-CHECKED` runs through the same word. `CATCH` and `THROW` are
-unchanged: each owner gives back its own state as an exception passes, as the
-loader and `WITH-GUARD` do. The system test passed class by class, 2,239
-tests, and the simulator suite on both executors, at 7cd045ed. On the merged
-state (MegaPad 8706dc99, Akashic fc8b0fb2) the physical Desktop journey
-passed, and so did 280 recorded test units and the ext4 sample of 65 tests.
-The whole ext4 unit did not run again.
-
-One case was left and is closed as well (Decided, 2026-11-11; MegaPad
-d63c5f87). When a line of a file fails, the evaluator records the failure in
-its status cell, and while that cell is set no enclosing line continues and
-no nested `EVALUATE` runs. The loader turned the status into a THROW and left
-the cell set. A word that caught a failed load and carried on therefore
-worked at the prompt, where the next line starts with a clear status, but not
-while a file that called it was still loading: the rest of its line was
-skipped and its own file failed with the code it had caught. Desk started
-from a boot script runs in that position for its whole life. The loader's
-failure path now clears the status as it rethrows, as it already gave back
-the evaluator's depth and compiler state. After a failed load a program reads
-the failure from the code it caught; `EVALUATE-CHECKED` and
-`SOURCE-EVALUATE-CHECKED`, which hand the status to their caller as a value,
-keep their rule. The branch passed the emulator files, every class of the
-system test and the simulator suite on both executors, 9,363 tests.
-
-Two smaller findings stay as they are. The BIOS does not end a background
-task that aborts: the prompt returns on the foreground's stack and `TASK-ID`
-still names the task. And `APP-EVAL` leaves its memory-protection window set
-when a THROW passes it, which matters only once that window is enforced.
 
 The ext4 driver itself loads from the boot volume on every boot, before any
 module can come from ext4. Its 22 modules are 1.39 MB of source, and loading
@@ -1030,10 +839,11 @@ Steps:
    than on every write.
 3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook,
    Akashic's module source, storage units for the system and user volumes,
-   the module that mounts the system volume, and the Desktop's boot from
-   that volume as a builder option, measured. Open: what the journey's File
-   Explorer step scrolls without the chunk files, and whether the option
-   becomes the default before or after the loader's per-line cost is cut.
+   and the Desktop's boot from the system volume as an option of the image
+   builder. To do: cut the loader's per-line cost, then decide whether the
+   option becomes the default (Decided, 2026-11-11). The record of this
+   step is in MegaPad's `docs/module-loading-and-storage-units-2026-11-11.md`
+   and Akashic's `local_testing/evidence/system-volume-boot-20261110.md`.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
 
@@ -1335,16 +1145,8 @@ bitmap had been patched full with no file owning the blocks; on a volume that
 files fill to its last block, the driver answers VFS-E-NOSPC with no I/O. The
 harness had scanned the whole image a byte at a time at every guest flush,
 which was most of a write test's wall time, and now compares each chunk with
-zeros (Akashic f068fdd1). The whole test_vfs_ext4 unit then ran at f068fdd1
-and MegaPad 7eba16c8 in 89 minutes, where it had taken 2 h 46 min: 832 cases
-passed, one was skipped and two failed. Both were rename-over tests that still
-counted a whole folder's entries in the VFS cache, which has held only the
-names a caller resolves since ext4 began to look names up one at a time
-(def0488c). They passed at the commit before it and failed from it on, and no
-slice's own run had selected them; c3d127b7 counts what the cache holds.
-The unit then passed whole at Akashic fc8b0fb2 and MegaPad d8a92092, with the
-loader hook under it, in 86 minutes. It peaks at 5.1 GiB of memory, above the
-4 GiB at which the working rules ask before a run.
+zeros (Akashic f068fdd1). The whole test_vfs_ext4 unit has since passed,
+which closes the step.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
