@@ -798,12 +798,15 @@ Steps:
 3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook,
    Akashic's module source, storage units for the system and user volumes,
    the Desktop's boot from the system volume as an option of the image
-   builder, and the cut in the loader's cost per line. To do: the compiled
-   token form of the modules, and the decision whether the option becomes
-   the default. The record of this step is in MegaPad's
-   `docs/module-loading-and-storage-units-2026-11-11.md` and
-   `docs/performance/loader-line-cost-2026-11-11.md`, and in Akashic's
-   `local_testing/evidence/system-volume-boot-20261110.md`.
+   builder, the cut in the loader's cost per line, and the compiled token
+   form of the modules, also as an option of the image builder. To do: the
+   decision whether the system volume and the token form become the
+   default. The record of this step is in MegaPad's
+   `docs/module-loading-and-storage-units-2026-11-11.md`,
+   `docs/performance/loader-line-cost-2026-11-11.md` and
+   `docs/token-modules-proposal-2026-11-11.md`, and in Akashic's
+   `local_testing/evidence/system-volume-boot-20261110.md` and
+   `local_testing/evidence/token-equivalence-20261111.md`.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
 
