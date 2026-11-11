@@ -765,6 +765,11 @@ block group (Decided, 2026-11-11). Until then a volume takes only the files
 of the groups its builder made ready, about 500 on a volume from `mke2fs`,
 whatever its size.
 
+A sync on a writable mount answers busy while a removed file is still open,
+and File Explorer's preview keeps files open. The driver is to land the
+sync and keep the removed file's record until the file closes (Proposed,
+2026-11-11); a run confirms the case first.
+
 Each volume has a storage unit of its own (Decided, 2026-11-10). The boot
 volume stays on unit 0, where the BIOS reads it, and the settings volume on
 unit 1; two more units hold the system and user volumes. Each volume is then
