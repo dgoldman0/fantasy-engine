@@ -36,7 +36,7 @@ made.
   libraries, Desk, the applets and Practices. LM1 is a Lisp chiplet that
   works beside MegaPad as a partner device, and the two share memory.
   MegaPad handles control, I/O and number crunching. LM1 runs the sandbox's
-  jobs and holds the data Desk wants collected, with type checks, allocation
+  jobs and manages the data Desk wants collected, with type checks, allocation
   and garbage collection in hardware, and its own software is written in
   Lisp. The combined chip is Leviathan, and the system people run is Fantasy
   Engine.
@@ -145,8 +145,9 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     memory, made through an Akashic library and used under the rules in
     Part 9d.
 29. MegaPad and LM1 share memory. Each chip reads and writes the other's
-    data where it lies, so nothing is copied between them. The cost that
-    remains is the hand-off when one chip asks the other to do work,
+    data where it lies, so nothing is copied between them; decision 37
+    says how the memory is lent. The cost that remains is the hand-off
+    when one chip asks the other to do work,
     signaling it and waiting for the answer, so work crosses as whole jobs.
     A hand-off would cost about the same on one die, and moving LM1 onto
     MegaPad's die wouldn't change the collector's limit either
@@ -294,6 +295,22 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     and keeps one record of passing runs for all of them, and each
     repository's tests still run without it, with nothing skipped
     (Part 1h).
+37. Chiplets attach to MegaPad through one generic interconnect, and LM1 is
+    the first chiplet on it. Every chiplet meets one contract: it
+    identifies itself, starts from an image MegaPad names, signals through
+    MegaPad's mailbox, takes and returns work through queues in shared
+    memory, and states the functions it offers and the memory it asks for.
+    Software asks for a function by its class, whichever chiplet provides
+    it, as decision 31 asks of the language. Memory is shared by lending:
+    the chip that owns a range lends it, the borrower reaches it across the
+    link, and the owner checks and orders each access. Lending applies in
+    both directions in the contract, and the first build carries one, in
+    which MegaPad lends its external memory. The data both chips work on is
+    stored there, Desk's managed data included (decision 28), because a
+    MegaPad core stalls on a slow read while LM1 switches hardware threads
+    during one. A chiplet lending its own memory to MegaPad waits for a use
+    that needs it. MegaPad's `docs/chiplet-interconnect-plan.md` holds the
+    design, with LM1's layer for sandbox jobs and managed data.
 
 ## 3. Open decisions
 
@@ -315,17 +332,19 @@ are chosen when LM1 work starts. Three questions remain:
 - where the chiplet's main memory lives.
 
 For main memory there are two options, and the chips share memory under
-either (decision 29). Its own memory, such as HBM or LPDDR, is fast and
-keeps LM1's heap and collector traffic off MegaPad's bus, but it makes the
-package more complex, and MegaPad's reads of managed data then cross the
-link. MegaPad's memory, reached over the link, is cheaper and simpler, but
-LM1's heap and collector then share bandwidth with Desk. Recommended: a
-short sizing study as the first step of Part 8b. It measures the work
-Leviathan gives LM1, which is sandbox jobs and Desk's managed data
-(decisions 27 and 28), including how often MegaPad reads that data and how
-much traffic the collector adds. It also sets an area budget relative to
-MegaPad and compares the bandwidth of each memory option. The study comes
-back with numbers before anything is chosen. Blocks Part 8b.
+either (decisions 29 and 37). Its own memory, such as HBM or LPDDR, is fast
+and keeps LM1's private heap and the collector's work on it away from
+MegaPad's memory, but it makes the package more complex, and LM1's work on
+shared data still crosses the link, since shared data is stored in
+MegaPad's memory. MegaPad's memory, reached over the link, is cheaper and
+simpler, but LM1's whole heap and collector then share MegaPad's external
+memory with Desk. Recommended: a short sizing study as the first step of
+Part 8b. It measures the work Leviathan gives LM1, which is sandbox jobs
+and Desk's managed data (decisions 27 and 28), including how often each
+chip touches that data and how much traffic the collector adds. It also
+sets an area budget relative to MegaPad and compares the bandwidth of each
+memory option. The study comes back with numbers before anything is
+chosen. Blocks Part 8b.
 
 **D12. Whether Study's concept map is written in the language.** The concept
 map is the release's first managed-data component (Part 9d), and the
@@ -1009,19 +1028,22 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
     define how MegaPad's writes reach the collector's records (decision 28).
     The spec's roots cover only LM1's own registers, stacks, tables and
     buffers.
-  - Answer two questions raised in March. Does LM1 get its own built-in
-    self-test, or does MegaPad run one for the whole package? Does LM1 adopt
-    MegaPad's hard QoS and one-instruction-per-cycle rule?
+  - Answer a question raised in March: does LM1 adopt MegaPad's hard QoS
+    and one-instruction-per-cycle rule? Its companion, who runs the
+    self-test, is settled by the interconnect design (decision 37): each
+    chiplet tests itself, and MegaPad starts the tests and collects the
+    results.
   - Fix the spec's contradictions in §3.1 and §12.1.
 
   As with MegaPad, the RTL describes the chip we want. Fitting the FPGA is
   not a gate.
-- **8c. The MegaPad link.** One spec covers doorbells and mailboxes, the
-  shared memory both chips read and write (decision 29), handing jobs over
-  and results back, MegaPad's side of managed data (handles, writes and the
-  windows in Part 9d), interrupts, loading and starting programs, errors,
-  reset and test access. Proposed: the spec lives in `lm1/` as the chiplet's
-  interface, and MegaPad implements the host side.
+- **8c. The link.** One spec covers the interconnect of decision 37 in two
+  layers. The chiplet contract covers identity, reset, loading and starting
+  programs, doorbells and mailboxes, interrupts, work queues, lent memory,
+  errors and test access. LM1's layer covers handing jobs over and results
+  back, and MegaPad's side of managed data (handles, writes and the windows
+  in Part 9d). Proposed: the chiplet contract lives in MegaPad's docs, since
+  MegaPad hosts every chiplet, and LM1's layer lives in `lm1/`.
 - **8d. The chiplet module** (Decided). LM1's model is written in
   accelerated C++ as a chiplet module that MegaPad's simulator imports
   through Part 3d's interface, and it is built from `lm1/`. The Python
@@ -1047,7 +1069,7 @@ same link tests.
 Needs Part 5 and Parts 3d, 8c and 8d.
 
 LM1 first shows what it does for Desk (decision 27): the sandbox's jobs run
-on it, and the data Desk wants collected lives in its heap. Lisp is how
+on it, and its collector manages the data Desk wants collected. Lisp is how
 LM1's side is written, and the Lisp console is a learning tool.
 
 - **9a.** MegaPad gets a system module for the chiplet, following
