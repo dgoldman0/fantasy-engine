@@ -724,11 +724,14 @@ the one unit long enough for resume to matter. A program from anywhere else
 still keeps its unit from resuming: `git`, the TeX and PDF tools, and the
 `cp` in the module-source unit.
 
-One unit of the simulator's own tests, `test_native_direct_path`, passes 4 GiB
-in a process of its own and is left out of the slice-end runs until its cause
-is fixed: a machine that uses the native engine is never freed, and that file
-makes 2,880 of them. The extension's classes own Python references that lead
-back to the machine, and Python's collector cannot see through them.
+A machine of the simulator's native engine was never freed, and now is
+(MegaPad c723d121). The extension's classes own Python references that lead
+back to the machine, and Python's collector could not see through them, so
+every machine a process made stayed with its memory. One test file makes
+2,880 machines and passed 4 GiB in a process of its own, and the whole
+simulator suite in one process reached 7 GiB. The three classes now take part
+in cycle collection. That file peaks at 89 MiB, and the largest process of
+the simulator suite, run in eight groups, at 126 MiB where it was 978 MiB.
 
 ### Part 2. Storage: ext4
 
@@ -831,6 +834,39 @@ one image file, the BIOS boots as it does now, and no partition table comes
 between the BIOS and the boot volume. A device can map its units onto
 partitions of one medium inside the storage controller.
 
+The two units are built (2026-11-10; MegaPad f69a52f8, b949a08c and 54b49bf6).
+The machine has four storage controllers of one design: unit 0 the boot disk
+at MMIO +0x0200, unit 1 the settings disk at +0x0280, unit 2 the system disk
+at +0x0D00 and unit 3 the user disk at +0x0D80. The settings and system disks'
+media are write-protected. One table in MegaPad's `shared/storage.py` defines
+the units for the emulator, the simulator and the host's options
+(`--system-storage`, `--user-storage`); the BIOS's unit words and KDOS's
+`BOOT-UNIT`, `SETTINGS-UNIT`, `SYSTEM-UNIT` and `USER-UNIT` name the same
+four; and the RTL generates one controller per unit behind an arbiter that
+takes any number of masters. "System" now names unit 2 only: unit 0 is the
+boot disk in code and documents, and KDOS's raw singletons for it are
+`BOOT-BD` and `BOOT-RAW-VOLUME`.
+
+Building them exposed a fault the settings disk had carried since e5b4ae34.
+With two controllers active at once under strict cycles a run stopped,
+because each controller numbers its own beats and the shared port passed
+those numbers on; the port now numbers the beats it offers. Two questions are
+left for the hardware. The RTL gives each unit an SD slot of its own, as the
+settings disk has, where a device may instead map units onto partitions of
+one medium; and the emulator grants the shared port in unit order where the
+RTL rotates the grant.
+
+Akashic's `utils/fs/system-volume.f` (14f39dec) is the piece of a boot that
+uses unit 2. `SYSVOL-MOUNT` mounts the system disk's ext4 volume read-only
+from an arena the boot supplies and fills a module source for it, which the
+boot hands to KDOS's `MODULE-SOURCE!`. Its tests run that sequence in the
+simulator and on the emulator and load a tree of modules by path from the
+third unit. Before the merge the units and the rename passed the emulator
+files the change reaches, every class of the system test and the simulator
+suite on both executors, 8,884 tests, and the RTL benches. On the merged
+state (MegaPad c723d121, Akashic 14f39dec) the physical Desktop journey
+passed, and so did 275 test units and the ext4 sample of 65 tests.
+
 KDOS's loader finds and reads a module through a hook, and Akashic plugs its
 VFS into that hook once the system volume is mounted (Decided, 2026-11-10).
 KDOS keeps one loader and one list of loaded modules, with the rollback after
@@ -931,9 +967,10 @@ Steps:
 2. Close the writer's alpha gaps: general allocation, renaming over an
    existing file, and folders. Prove block ownership once per mount rather
    than on every write.
-3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook
-   and Akashic's module source. To do: storage units for the system and user
-   volumes, what the boot loads from where, and the boot's measured cost.
+3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook,
+   Akashic's module source, storage units for the system and user volumes,
+   and the module that mounts the system volume. To do: the Desktop's boot
+   from that volume and its measured cost.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
 
