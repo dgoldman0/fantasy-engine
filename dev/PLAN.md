@@ -751,6 +751,13 @@ module can come from ext4. Its 22 modules are 1.39 MB of source, and loading
 the driver from source has taken about 1.22 billion guest steps, at least 12 s
 at the SoC's 100 MHz clock. Step 3 measures what the boot then costs.
 
+A compiled build of the modules takes a token form (Decided, 2026-11-11):
+Forth with its names resolved and its text split, which the simulator, the
+emulator and a device each compile in their own way from one file. The loader
+keeps taking plain source files. Machine-code images run only on the emulator
+and a device, so loading them in hybrid mode stays later MegaPad work, planned
+in its `docs/hybrid-native-dictionary-plan.md`.
+
 Steps:
 
 1. Settle the boot path. Done: a small MP64FS boot volume.
@@ -761,11 +768,13 @@ Steps:
    `local_testing/evidence/ext4-writer-20261104.md`.
 3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook,
    Akashic's module source, storage units for the system and user volumes,
-   and the Desktop's boot from the system volume as an option of the image
-   builder. To do: cut the loader's per-line cost, then decide whether the
-   option becomes the default (Decided, 2026-11-11). The record of this
-   step is in MegaPad's `docs/module-loading-and-storage-units-2026-11-11.md`
-   and Akashic's `local_testing/evidence/system-volume-boot-20261110.md`.
+   the Desktop's boot from the system volume as an option of the image
+   builder, and the cut in the loader's cost per line. To do: the compiled
+   token form of the modules, and the decision whether the option becomes
+   the default. The record of this step is in MegaPad's
+   `docs/module-loading-and-storage-units-2026-11-11.md` and
+   `docs/performance/loader-line-cost-2026-11-11.md`, and in Akashic's
+   `local_testing/evidence/system-volume-boot-20261110.md`.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
 
