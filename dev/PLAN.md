@@ -807,13 +807,16 @@ Steps:
    builder, the cut in the loader's cost per line, and the compiled token
    form of the modules, also as an option of the image builder. The default
    boot stays the linked source build for now, and becomes the system
-   volume with token files once the simulator replays token files natively
-   (Decided, 2026-11-11): until then a token build takes most of a minute
-   and boots more slowly on the host, which every test that builds a
-   Desktop would pay. Meanwhile the physical journey also runs in the
+   volume with token files once the simulator replays and records token
+   files natively (Decided, 2026-11-11): until then a token build takes
+   most of a minute and boots more slowly on the host, which every test
+   that builds a Desktop would pay. Both go through the simulator's native
+   line walker, whose handling of a token is stated once and fed from
+   source text or from token records, with a tap for the recorder
+   (Decided, 2026-11-11). Meanwhile the physical journey also runs in the
    shipping form whenever loader, token or ext4 code changes. To do: the
-   simulator's native replay, and the switch of the default after it. The
-   record of this step is in MegaPad's
+   native replay and recording, and the switch of the default after them.
+   The record of this step is in MegaPad's
    `docs/module-loading-and-storage-units-2026-11-11.md`,
    `docs/performance/loader-line-cost-2026-11-11.md` and
    `docs/token-modules-proposal-2026-11-11.md`, and in Akashic's
