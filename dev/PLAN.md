@@ -777,7 +777,13 @@ keeps taking plain source files. Token files are built on the host when an
 image is built, and before the release the System Practice builds them on
 the machine as well (Part 7). A volume carries token files without their
 source; the System Practice's system volume carries the source beside them
-(both Decided, 2026-11-11). Machine-code images run only on the emulator
+(both Decided, 2026-11-11). A token file is used only on top of what it was
+recorded on. A volume built for another BIOS, KDOS or boot volume is
+refused, and in the System Practice an edited module and the modules loaded
+after it load from source until their token files are built again (Decided
+for now, 2026-11-11). Whether the modules loaded after an edited one need
+to count as stale is not settled, and the rule may be narrowed to the edited
+module alone. Machine-code images run only on the emulator
 and a device, so loading them in hybrid mode stays later MegaPad work, planned
 in its `docs/hybrid-native-dictionary-plan.md`.
 
