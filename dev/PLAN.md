@@ -711,16 +711,24 @@ off, which brings a MegaPad unit from about 4.5 MB of writes to about
 0.2 MB. Proposed: MegaPad's `accel` target writes nothing when the library
 is current, which removes the remaining copy from every test target.
 
-Open: resuming a unit that starts programs. A pytest unit cut off midway
-resumes after the tests it passed (53ec37d), but not when it starts a program
-other than Python, because the recording sees that the program started and
-not what it read. Twelve of the 283 recorded units start one: `git`, the TeX
-and PDF tools, `cp`, and the pinned e2fsprogs of the ext4 and module-source
-units, of which the ext4 unit is the one long enough to matter. Recording the
-program's own file would catch a changed tool and nothing it reads. Three
-ways are sound: each repository declares the tool folders whose programs read
-only their own files and their arguments, as the pinned e2fsprogs do; the
-tool traces what started programs read; or resume stays as it is.
+A unit that starts programs resumes when its repository vouches for them
+(Decided, 2026-11-10; 79c1cf4). A pytest unit cut off midway resumes after the
+tests it passed (53ec37d), but the recording sees that a program other than
+Python started and not what it read, so such a unit always ran from its
+start. Each repository now names the tool folders whose programs read only
+their own file and the files their arguments name. The recorder notes both
+when such a program starts, which makes them inputs of the unit like any file
+Python reads. Akashic names the folder of the pinned e2fsprogs, by the
+variable its tests take it from, and the ext4 unit starts nothing else; it is
+the one unit long enough for resume to matter. A program from anywhere else
+still keeps its unit from resuming: `git`, the TeX and PDF tools, and the
+`cp` in the module-source unit.
+
+One unit of the simulator's own tests, `test_native_direct_path`, passes 4 GiB
+in a process of its own and is left out of the slice-end runs until its cause
+is fixed: a machine that uses the native engine is never freed, and that file
+makes 2,880 of them. The extension's classes own Python references that lead
+back to the machine, and Python's collector cannot see through them.
 
 ### Part 2. Storage: ext4
 
@@ -871,16 +879,46 @@ survive its parent's failure; it now expects the loader's rule, that the
 dependency is rolled back with the parent, and MegaPad's README states that
 rule. The whole system test then passed class by class, 2,236 tests in 97
 classes, each class in a process of its own; one class of network tests
-reaches 3.9 GiB and ran in two parts.
+reaches 3.9 GiB and ran in two parts. The whole ext4 unit passed on that state
+as well (MegaPad e42b0d1c, Akashic fc8b0fb2), in 97 minutes at a peak of
+5.1 GiB.
 
-Two hazards beside these stay open, and MegaPad's reference states both. An
-`ABORT` taken inside a `CATCH` leaves that frame's address in `HANDLER`, since
-the BIOS resets the stacks without telling KDOS, and a later THROW unwinds
-into the dead frame; clearing it needs a hook where the BIOS resets the
-stacks. And a word that catches across plain `EVALUATE` without unwinding the
-evaluator disables every later `EVALUATE` until an `ABORT`; a KDOS wrapper
-around `EVALUATE`, or a `CATCH` that keeps the evaluator's depth, would close
-that. Both change core words and await a decision.
+The two hazards those tests exposed are closed in KDOS (Decided, 2026-11-10;
+MegaPad 2e5d8c99 and 7cd045ed). An `ABORT` taken inside a `CATCH` used to
+leave that frame's address in `HANDLER`, since the BIOS reset the stacks
+without telling KDOS, and a later THROW unwound into the dead frame. BIOS
+`QUIT`, where `ABORT` and `ABORT"` end, now runs a callback once it has reset
+the return stack (`QUIT-XT!`), and KDOS installs one that clears its exception
+chain. And a THROW that crossed plain `EVALUATE` used to leave the evaluator
+one level deep, which disabled every later `EVALUATE` until an `ABORT`. KDOS
+now shadows `EVALUATE` with a word that runs the BIOS word under `CATCH`,
+gives the evaluator its depth back when an exception passes, and rethrows;
+`EVALUATE-CHECKED` runs through the same word. `CATCH` and `THROW` are
+unchanged: each owner gives back its own state as an exception passes, as the
+loader and `WITH-GUARD` do. The system test passed class by class, 2,239
+tests, and the simulator suite on both executors, at 7cd045ed. On the merged
+state (MegaPad 8706dc99, Akashic fc8b0fb2) the physical Desktop journey
+passed, and so did 280 recorded test units and the ext4 sample of 65 tests.
+The whole ext4 unit did not run again.
+
+One case stays open and awaits a decision. When a line of a file fails, the
+evaluator records the failure in its status cell, and while that cell is set
+no enclosing line continues and no nested `EVALUATE` runs. The loader turns
+the status into a THROW and leaves the cell set. A word that catches a failed
+load and carries on therefore works at the prompt, where the next line starts
+with a clear status, but not while a file that called it is still loading:
+the rest of its line is skipped and its own file fails with the code it had
+caught. Desk started from a boot script runs in that position for its whole
+life. A trial on the emulator showed both the failure and the remedy: with one
+line in the loader's failure path that clears the status as it rethrows, the
+catching word's line continues and the next `REQUIRE` loads. After a failed
+load a program then reads the failure from the THROW code and no longer from
+`EVAL-STATUS`.
+
+Two smaller findings stay as they are. The BIOS does not end a background
+task that aborts: the prompt returns on the foreground's stack and `TASK-ID`
+still names the task. And `APP-EVAL` leaves its memory-protection window set
+when a THROW passes it, which matters only once that window is enforced.
 
 The ext4 driver itself loads from the boot volume on every boot, before any
 module can come from ext4. Its 22 modules are 1.39 MB of source, and loading
