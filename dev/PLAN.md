@@ -1058,6 +1058,9 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   in Part 9d). Decided: the spec is kept on MegaPad's side, in MegaPad's
   docs beside the design, because the interconnect belongs to MegaPad and to
   Leviathan as a whole, and `lm1/` keeps LM1's side of the RTL (Part 8e).
+  Done: the hardware link (ports, registers, channels and sideband), in
+  MegaPad's `docs/chiplet-link.md`. To do: the offer list, the work queues
+  and LM1's layer.
 - **8d. The chiplet module** (Decided). LM1's model is written in
   accelerated C++ as a chiplet module that MegaPad's simulator imports
   through Part 3d's interface, and it is built from `lm1/`. The Python
@@ -1066,7 +1069,9 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   spec, fix whichever is wrong, and add a test.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
-  MegaPad's side of the link to its SoC.
+  MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
+  and LM1 has a link endpoint and a boot fetch that pass a bench joined to
+  MegaPad's RTL. To do: wire them into LM1's cluster.
 - **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
   build the Lisp runtime image that MegaPad loads.
 - **8g. Verification.** Link conformance tests, including handles that
