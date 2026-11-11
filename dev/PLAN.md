@@ -1042,8 +1042,9 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   programs, doorbells and mailboxes, interrupts, work queues, lent memory,
   errors and test access. LM1's layer covers handing jobs over and results
   back, and MegaPad's side of managed data (handles, writes and the windows
-  in Part 9d). Proposed: the chiplet contract lives in MegaPad's docs, since
-  MegaPad hosts every chiplet, and LM1's layer lives in `lm1/`.
+  in Part 9d). Decided: the spec is kept on MegaPad's side, in MegaPad's
+  docs beside the design, because the interconnect belongs to MegaPad and to
+  Leviathan as a whole, and `lm1/` keeps LM1's side of the RTL (Part 8e).
 - **8d. The chiplet module** (Decided). LM1's model is written in
   accelerated C++ as a chiplet module that MegaPad's simulator imports
   through Part 3d's interface, and it is built from `lm1/`. The Python
@@ -1139,6 +1140,10 @@ The planned set:
 - Practices, and what each sample configuration's Practice does;
 - programming the machine: Forth, KDOS and the libraries;
 - the LM1 chiplet: the sandbox on LM1, managed data, and Lisp;
+- what sets the machine apart: the traits unique to its design and what
+  each makes possible, such as devices that work directly on memory inside
+  checked ranges and cores that read memory uncached, which together let a
+  chiplet share memory simply;
 - hardware reference: MegaPad, LM1 and the link;
 - library reference, covering shipped libraries only (from Part 1d).
 
@@ -1198,7 +1203,7 @@ or before a chip is made, a lawyer reviews the licensing.
 - Three parts lead (Decided): Part 2 (ext4), Part 3 (the simulator) and
   Part 8 (the LM1 chiplet). They proceed side by side, mostly in different
   repositories: Part 2 in Akashic and MegaPad, Part 3 in MegaPad, and Part 8
-  in `lm1/`.
+  in `lm1/`, with the link's spec (8c) in MegaPad.
 - Parts 4 and 5 can proceed alongside them. Part 4's image builder moves
   onto ext4 once Part 2 lands.
 - The language (decision 32) starts with the checker when release work
