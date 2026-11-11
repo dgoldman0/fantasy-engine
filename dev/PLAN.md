@@ -773,7 +773,11 @@ at the SoC's 100 MHz clock. Step 3 measures what the boot then costs.
 A compiled build of the modules takes a token form (Decided, 2026-11-11):
 Forth with its names resolved and its text split, which the simulator, the
 emulator and a device each compile in their own way from one file. The loader
-keeps taking plain source files. Machine-code images run only on the emulator
+keeps taking plain source files. Token files are built on the host when an
+image is built, and before the release the System Practice builds them on
+the machine as well (Part 7). A volume carries token files without their
+source; the System Practice's system volume carries the source beside them
+(both Decided, 2026-11-11). Machine-code images run only on the emulator
 and a device, so loading them in hybrid mode stays later MegaPad work, planned
 in its `docs/hybrid-native-dictionary-plan.md`.
 
@@ -989,6 +993,9 @@ Contents:
 - Pad and Explorer;
 - a Forth console applet, which doesn't exist yet. It loads modules from the
   user area and shows what they do;
+- the building of token files on the machine, so that a learner's module
+  loads from its compiled form as the shipped libraries do (Decided,
+  2026-11-11; Part 2);
 - the Lisp console on LM1 (Part 9e), so both of Leviathan's engines can be
   learned side by side;
 - the library reference, readable from inside the system.
