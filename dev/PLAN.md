@@ -867,6 +867,65 @@ suite on both executors, 8,884 tests, and the RTL benches. On the merged
 state (MegaPad c723d121, Akashic 14f39dec) the physical Desktop journey
 passed, and so did 275 test units and the ext4 sample of 65 tests.
 
+The Desktop boots from the system volume as an option of the image builder
+(Akashic 6832aa50 and 8c06d3f3). `--system-volume` puts a profile's modules on
+an ext4 image beside the boot image, each a plain file with the repository's
+text. The boot volume keeps KDOS, its system modules, the resources and the
+samples, and holds the closure of the mounting module in place of the
+profile's modules, deployed as the profile deploys source. `autoexec.f` loads
+that closure, mounts the volume, selects it as the module source and then
+runs the profile's own `REQUIRE` lines. The image is made with the pinned
+e2fsprogs from the ext4 fixtures' profile and sized from its content. Two
+rules of the driver set its smallest size: every block group carries a full
+group's inode table, and a mount takes the second group's backup superblock
+as its journal witness, a read-only mount included. A volume of 4 KiB blocks
+is therefore at least 131 MiB, where the modules need 18 MiB. The option is
+off unless given. A default build is unchanged: the boot images of five
+profiles hold the same files as before. On the merged state (Akashic
+8c06d3f3) the unchanged journey passed, and so did the 27 test units the
+change reaches and the ext4 sample.
+
+Measured for `desktop-apt1` on the emulator, from reset to entering Desk
+(MegaPad c723d121), in millions of instructions:
+
+| Phase | Linked chunks | System volume |
+|---|---|---|
+| BIOS and KDOS | 56 | 56 |
+| networking, rich terminal, cold-source loader | 294 | 292 |
+| the volume's driver, 24 modules in 8 chunks | | 404 |
+| the mount | | 12 |
+| the profile's 310 modules | 2,642 | 3,558 |
+| the rest | under 2 | 2 |
+| total | 2,992 | 4,324 |
+
+In system cycles the totals are 3,716 M and 5,388 M, 37 and 54 seconds at
+the SoC's 100 MHz. The modules are 52 chunks of 6.32 MB compacted source in
+one column and 309 files of 9.53 MB in the other. KDOS's loader spends about
+15,000 instructions on a line whether it holds code or a comment, in both
+boots, so the plain files' 53,000 comment and blank lines are most of the
+difference: the same modules compacted on the volume loaded in 812 M fewer.
+Resolving all 310 paths and reading every file through ext4 costs about
+200 M. The driver has no block cache and asked the disk for 11,986 single
+blocks, which the emulator does not charge as a card would. With 1 KiB blocks
+the volume is 16 MiB and the boot 444 M longer. In the simulator the boot
+takes 9.3 s where the linked one takes 2.5 s, host time only. The mount used
+190,640 bytes of its 524,288-byte arena.
+
+The physical journey passes its first 27 stages with the option and stops at
+File Explorer's wheel step, which needs a root listing three rows longer than
+its table shows. The 52 chunk files in the boot volume's root had supplied
+those rows without the step naming them. In a build made only to check this,
+with the root padded to its usual length, the whole journey passed with the
+modules loaded from the system volume. What that step scrolls once the chunks
+are gone awaits a decision, and so does making the option the default.
+
+What would cut the boot's cost, in the order the measurements suggest: the
+loader skipping comment and blank lines (up to 0.8 G, bounded by the
+compacted run); the per-line cost itself, which is nearly all of both boots
+and needs a profile first; loading only the driver's read-only part at boot
+(most of 404 M); and a cache for the driver's metadata blocks with data read
+in extent runs (reads fall below a thousand).
+
 KDOS's loader finds and reads a module through a hook, and Akashic plugs its
 VFS into that hook once the system volume is mounted (Decided, 2026-11-10).
 KDOS keeps one loader and one list of loaded modules, with the rollback after
@@ -969,8 +1028,10 @@ Steps:
    than on every write.
 3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook,
    Akashic's module source, storage units for the system and user volumes,
-   and the module that mounts the system volume. To do: the Desktop's boot
-   from that volume and its measured cost.
+   the module that mounts the system volume, and the Desktop's boot from
+   that volume as a builder option, measured. Open: what the journey's File
+   Explorer step scrolls without the chunk files, and whether the option
+   becomes the default before or after the loader's per-line cost is cut.
 4. Build ext4 images on the host.
 5. Move the image builder (Part 4a) onto them.
 
