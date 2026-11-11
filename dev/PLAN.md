@@ -653,6 +653,12 @@ repository names the folders those programs come from and vouches that each
 reads only its own file and the files its arguments name (Decided,
 2026-11-10). Akashic names the folder of its pinned e2fsprogs.
 
+A known limit, found on 2026-11-11 and left: the tool leaves every file in
+the folder of its record file out of a unit's inputs. A record file kept in
+a folder that also holds the trees under test therefore lets a unit be
+skipped although its inputs changed. The default record file, under
+`~/.cache`, has a folder of its own and is not affected.
+
 ### Part 2. Storage: ext4
 
 One of the three leading items (Decided): reasonable ext4 support, not
@@ -799,9 +805,15 @@ Steps:
    Akashic's module source, storage units for the system and user volumes,
    the Desktop's boot from the system volume as an option of the image
    builder, the cut in the loader's cost per line, and the compiled token
-   form of the modules, also as an option of the image builder. To do: the
-   decision whether the system volume and the token form become the
-   default. The record of this step is in MegaPad's
+   form of the modules, also as an option of the image builder. The default
+   boot stays the linked source build for now, and becomes the system
+   volume with token files once the simulator replays token files natively
+   (Decided, 2026-11-11): until then a token build takes most of a minute
+   and boots more slowly on the host, which every test that builds a
+   Desktop would pay. Meanwhile the physical journey also runs in the
+   shipping form whenever loader, token or ext4 code changes. To do: the
+   simulator's native replay, and the switch of the default after it. The
+   record of this step is in MegaPad's
    `docs/module-loading-and-storage-units-2026-11-11.md`,
    `docs/performance/loader-line-cost-2026-11-11.md` and
    `docs/token-modules-proposal-2026-11-11.md`, and in Akashic's
