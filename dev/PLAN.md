@@ -996,19 +996,21 @@ state (MegaPad 8706dc99, Akashic fc8b0fb2) the physical Desktop journey
 passed, and so did 280 recorded test units and the ext4 sample of 65 tests.
 The whole ext4 unit did not run again.
 
-One case stays open and awaits a decision. When a line of a file fails, the
-evaluator records the failure in its status cell, and while that cell is set
-no enclosing line continues and no nested `EVALUATE` runs. The loader turns
-the status into a THROW and leaves the cell set. A word that catches a failed
-load and carries on therefore works at the prompt, where the next line starts
-with a clear status, but not while a file that called it is still loading:
-the rest of its line is skipped and its own file fails with the code it had
-caught. Desk started from a boot script runs in that position for its whole
-life. A trial on the emulator showed both the failure and the remedy: with one
-line in the loader's failure path that clears the status as it rethrows, the
-catching word's line continues and the next `REQUIRE` loads. After a failed
-load a program then reads the failure from the THROW code and no longer from
-`EVAL-STATUS`.
+One case was left and is closed as well (Decided, 2026-11-11; MegaPad
+d63c5f87). When a line of a file fails, the evaluator records the failure in
+its status cell, and while that cell is set no enclosing line continues and
+no nested `EVALUATE` runs. The loader turned the status into a THROW and left
+the cell set. A word that caught a failed load and carried on therefore
+worked at the prompt, where the next line starts with a clear status, but not
+while a file that called it was still loading: the rest of its line was
+skipped and its own file failed with the code it had caught. Desk started
+from a boot script runs in that position for its whole life. The loader's
+failure path now clears the status as it rethrows, as it already gave back
+the evaluator's depth and compiler state. After a failed load a program reads
+the failure from the code it caught; `EVALUATE-CHECKED` and
+`SOURCE-EVALUATE-CHECKED`, which hand the status to their caller as a value,
+keep their rule. The branch passed the emulator files, every class of the
+system test and the simulator suite on both executors, 9,363 tests.
 
 Two smaller findings stay as they are. The BIOS does not end a background
 task that aborts: the prompt returns on the foreground's stack and `TASK-ID`
