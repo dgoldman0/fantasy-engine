@@ -888,8 +888,14 @@ microcore stacks.
 - **3d. Chiplet modules** (Decided). The simulator imports a chiplet's model
   as a C++ module through a defined interface. The interface covers link
   endpoints, shared memory windows, interrupts, reset, and the module's place
-  in the simulator's rounds. Proposed: the emulator loads the same modules,
-  so both backends run the same chiplet model.
+  in the simulator's rounds. Decided 2026-11-11: the interface is plain C,
+  a module is built in or loaded at run time, which costs about a nanosecond
+  per link operation, the emulator loads the same modules, and the interface
+  carries save and restore of a module's state. Done: the interface
+  (MegaPad's `shared/accel/chiplet_module.h`), MegaPad's side of the link as
+  one C++ model in the emulator and the simulator, and a test chiplet that
+  both run. In the simulator a chiplet steps where the guest reads its port
+  and when a dispatch returns; its place in rounds follows 3a.
 - **3e. Microcore gaps.** Before microcore simulation is built, the RTL
   microcore widens to 32 registers and decodes the REX prefix's extension
   bits as the full core does, and boot gives microcores their stacks. A test
@@ -1097,8 +1103,11 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   docs beside the design, because the interconnect belongs to MegaPad and to
   Leviathan as a whole, and `lm1/` keeps LM1's side of the RTL (Part 8e).
   Done: the hardware link (ports, registers, channels and sideband), in
-  MegaPad's `docs/chiplet-link.md`. To do: the offer list, the work queues
-  and LM1's layer.
+  MegaPad's `docs/chiplet-link.md`, with System Info's word for the ports,
+  and the queues and offers through which the chips exchange work: rings of
+  64-byte entries in lent memory, each count written by one chip, found
+  through a control block whose address the port hands the chiplet at
+  release. To do: the software at both ends of the queues, and LM1's layer.
 - **8d. The chiplet module** (Decided). LM1's model is written in
   accelerated C++ as a chiplet module that MegaPad's simulator imports
   through Part 3d's interface, and it is built from `lm1/`. The Python
@@ -1108,8 +1117,9 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
-  and LM1 has a link endpoint and a boot fetch that pass a bench joined to
-  MegaPad's RTL. To do: wire them into LM1's cluster.
+  its mailbox reaches the small cores as well as the full ones, and LM1 has
+  a link endpoint and a boot fetch that pass a bench joined to MegaPad's
+  RTL. To do: wire them into LM1's cluster.
 - **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
   build the Lisp runtime image that MegaPad loads.
 - **8g. Verification.** Link conformance tests, including handles that
@@ -1132,7 +1142,11 @@ LM1's side is written, and the Lisp console is a learning tool.
 - **9a.** MegaPad gets a system module for the chiplet, following
   `networking.f` and `rich-terminal.f`. MegaPad owns it, and system
   composition loads it at boot, since every configuration runs on
-  Leviathan.
+  Leviathan. Decided 2026-11-11: there is one BIOS, with two layers of
+  words. The module's general chiplet words serve any chiplet and name
+  none, and a Leviathan vocabulary above them names functions by their
+  class, as decision 31 asks. A first list of the general words is in
+  MegaPad's `docs/chiplet-interconnect-plan.md`.
 - **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
