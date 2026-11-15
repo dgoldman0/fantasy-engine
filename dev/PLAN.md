@@ -831,22 +831,23 @@ Steps:
 3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook,
    Akashic's module source, storage units for the system and user volumes,
    the Desktop's boot from the system volume as an option of the image
-   builder, the cut in the loader's cost per line, and the compiled token
-   form of the modules, also as an option of the image builder. The default
-   boot stays the linked source build for now, and becomes the system
-   volume with token files once the simulator replays and records token
-   files natively (Decided, 2026-11-11): until then a token build takes
-   most of a minute and boots more slowly on the host, which every test
-   that builds a Desktop would pay. Both go through the simulator's native
-   line walker, whose handling of a token is stated once and fed from
-   source text or from token records, with a tap for the recorder
-   (Decided, 2026-11-11). Meanwhile the physical journey also runs in the
-   shipping form whenever loader, token or ext4 code changes. To do: the
-   native replay and recording, and the switch of the default after them.
+   builder, the cut in the loader's cost per line, the compiled token
+   form of the modules, also as an option of the image builder, and the
+   simulator's native replay and recording of token files. The default
+   boot stays the linked source build until the user volume attaches
+   (Decided, 2026-11-15, in place of the switch once planned for when
+   the simulator replayed and recorded natively). Built and booted on the
+   host, the system volume with token files still costs a test about 35
+   seconds where linked source costs 5, and a Desktop with a user volume
+   loads the ext4 driver at boot in either form, which changes that
+   comparison. Meanwhile the physical journey also runs in the shipping
+   form whenever loader, token, ext4 or volume code changes. To do: the
+   switch of the default.
    The record of this step is in MegaPad's
    `docs/module-loading-and-storage-units-2026-11-11.md`,
-   `docs/performance/loader-line-cost-2026-11-11.md` and
-   `docs/token-modules-proposal-2026-11-11.md`, and in Akashic's
+   `docs/performance/loader-line-cost-2026-11-11.md`,
+   `docs/token-modules-proposal-2026-11-11.md` and
+   `docs/simulator-native-evaluator.md`, and in Akashic's
    `local_testing/evidence/system-volume-boot-20261110.md` and
    `local_testing/evidence/token-equivalence-20261111.md`.
 4. Build ext4 images on the host.
