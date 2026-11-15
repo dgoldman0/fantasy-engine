@@ -760,6 +760,22 @@ volume to another. A Practice sets which places its applets see and whether
 they may write there (Part 5b), and the software handles several volumes
 even where a configuration shows one.
 
+Three decisions shape the places (2026-11-15).
+
+- **Opening a file names its volume** (Decided). The VFS library's setting
+  for a current volume goes, so that no code can depend on which volume
+  happens to be selected.
+- **The user volume holds two places** (Decided for now): the user's
+  documents, and the applets' records. A Practice can then show File
+  Explorer the documents alone. The split is held loosely and may change
+  if it feels wrong in use.
+- **An unavailable place does not block what can still work** (Decided).
+  At boot the machine stops with a message only when the place its shipped
+  files are read from is missing. When the place for its records is
+  missing it starts in recovery, with every place read-only and each store
+  saying why, so that the fault can be found and fixed from inside. It
+  never falls back to another volume.
+
 The writer makes an inode group ready when it first needs one, as it does a
 block group (Decided, 2026-11-11). Until then a volume takes only the files
 of the groups its builder made ready, about 500 on a volume from `mke2fs`,
