@@ -782,9 +782,26 @@ of the groups its builder made ready, about 500 on a volume from `mke2fs`,
 whatever its size.
 
 A sync on a writable mount answers busy while a removed file is still open,
-and File Explorer's preview keeps files open. The driver is to land the
-sync and keep the removed file's record until the file closes (Proposed,
-2026-11-11); a run confirms the case first.
+and the driver refuses every create on the volume meanwhile; File
+Explorer's preview keeps files open. The driver is to land the sync, take
+other writes, and keep the removed file's record until the file closes
+(Decided, 2026-11-15, after a run confirmed the case).
+
+A save asks the filesystem under the file whether a rename there survives a
+power cut whole (Decided, 2026-11-15). Where it does, as on ext4, the save
+writes the new content beside the file, reads it back, and renames it over
+the file in one journal transaction. Where it does not, as on MP64FS, the
+save keeps its present protocol of a marker, a backup and a sync after
+each step, which was built for a filesystem without a journal. Both stay,
+since a writable place may sit on either kind, and applets call the same
+word. On a 64 MiB ext4 volume the present protocol takes 5 to 6 seconds of
+processor time at 100 MHz for one document; the rename is expected to take
+about 2.
+
+Measured on 2026-11-15, a write still costs more as the volume grows (a
+small one takes 0.3 s at 64 MiB and 9.9 s at 1 GiB, for the same blocks
+written), and a volume fresh from `mke2fs` stops the machine on its first
+write. The driver is to close both before the user volume attaches.
 
 Each volume has a storage unit of its own (Decided, 2026-11-10). The boot
 volume stays on unit 0, where the BIOS reads it, and the settings volume on
