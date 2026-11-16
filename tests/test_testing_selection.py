@@ -384,11 +384,41 @@ def test_an_interrupted_unit_resumes_when_its_programs_come_from_declared_folder
     assert "resumed after 2 passed tests" in text
     assert not summary.failed
 
-    # The tool's file is an input of the recorded result.  The unit still
-    # starts a program, so the selection runs it every time.
+    # The tool's file is an input of the recorded result, and a unit whose
+    # programs all come from declared folders is skipped like any other while
+    # nothing it or its tool read has changed.
     result = store.latest_pass(unit[0].id)
     assert str(tool.resolve()) in result.inputs["files"]
-    assert result.inputs["unrecordable"] == ["%s (not Python)" % tool]
+    assert result.inputs["unrecordable"] == []
+    summary, ran_units, _ = run(repo, store, tmp_path, units=unit)
+    assert ran_units == [] and summary.skipped == 1
+
+
+def test_a_unit_with_declared_programs_runs_again_when_its_tool_or_a_file_changes(
+        demo, store, tmp_path, tooled):
+    make, tool, flag, ran = tooled
+    repo, unit = make(tool.parent)
+    run(repo, store, tmp_path, units=unit)
+    _, ran_units, _ = run(repo, store, tmp_path, units=unit)
+    assert ran_units == []
+
+    tool.write_text("#!/bin/sh\ntest -f \"$1\" && true\n")
+    _, ran_units, text = run(repo, store, tmp_path, units=unit)
+    assert ran_units == ["tests/test_t.py"]
+    assert "changed: %s" % tool.resolve() in text
+
+    # Only the tool read data/a.txt: the test names it on the command line.
+    (demo.root / "data" / "a.txt").write_text("a2")
+    _, ran_units, text = run(repo, store, tmp_path, units=unit)
+    assert ran_units == ["tests/test_t.py"]
+    assert "changed: %s" % (demo.root / "data" / "a.txt") in text
+
+
+def test_a_unit_that_starts_an_undeclared_program_always_runs(
+        store, tmp_path, tooled):
+    make, tool, flag, ran = tooled
+    repo, unit = make()
+    run(repo, store, tmp_path, units=unit)
     _, ran_units, text = run(repo, store, tmp_path, units=unit)
     assert ran_units == ["tests/test_t.py"]
     assert "it starts %s (not Python)" % tool in text

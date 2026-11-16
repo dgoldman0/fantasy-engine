@@ -25,9 +25,10 @@ An attempt that started a program other than Python resumes only when every
 such program lies in a folder its repository declares (``Repo.tool_folders``):
 the repository states that those programs read only their own file and the
 files their arguments name.  Both are recorded when a program starts, so a
-changed tool or a changed file handed to it starts the unit over.  A program
-from anywhere else keeps the unit from resuming, and a unit that starts any
-program is still never skipped.
+changed tool or a changed file handed to it starts the unit over.  The same
+statement lets such a unit be skipped, like a unit that starts no program,
+while nothing it or its programs read has changed.  A program from anywhere
+else keeps the unit from resuming and from being skipped.
 """
 
 from __future__ import annotations
@@ -373,12 +374,12 @@ class Runner:
         seen = records.load(record)
         excluded = (tmp, partial, self.store.path.parent, logs)
         inputs = seen.inputs(excluded)
-        # The declared tools the unit started are inputs by their files.  The
-        # unit still counts as starting programs, so it is never skipped.
-        tools, _ = seen.started_tools(tool_folders)
+        # The declared tools the unit started are inputs by their files, as
+        # the files their arguments named already are, so they leave nothing
+        # unrecorded.  A program from anywhere else does.
+        tools, unrecordable = seen.started_tools(tool_folders)
         inputs.files = sorted(set(inputs.files) | set(tools)
                               | {str(p) for p in launch.launcher_inputs})
-        unrecordable = sorted(seen.unrecordable)
         if seen.errors:
             unrecordable.append("a recorder error (%s)" % seen.errors[0])
         if not seen.processes:
