@@ -2,7 +2,10 @@
 
 For each unit the runner compares the inputs its latest passing run read
 with their current contents.  A unit runs again when there is no passing
-run, when its launch settings differ, when its last run started a program
+run, when its launch settings differ (its command, its folder, and the
+environment it receives, which takes from the caller only the variables
+that shape a result, while those that locate another checkout or a pinned
+tool are set by the unit's repository), when its last run started a program
 whose reads went unrecorded, or when any input has changed; otherwise it is
 reported as unchanged since that run.  A full run executes every unit and
 checks the selection: a unit the selection would have skipped that now gives
@@ -45,13 +48,14 @@ from typing import TextIO
 from . import records
 from .recorder.fe_cases import PASSED_ENV, RESUME_ENV
 from .store import Result, Store
-from .suites import Repo, Unit
+from .suites import LAUNCH_VARIABLES, Repo, Unit
 
 RECORDER_DIR = Path(__file__).resolve().parent / "recorder"
 RAM = Path("/dev/shm")
 
 # Variables a unit receives from the caller's environment.  Everything else
 # is left out, so a run's environment is exactly what its key describes.
+# LAUNCH_VARIABLES are left out too: a repository's launch sets them.
 _PASSED = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LANGUAGE",
            "TERM", "TZ", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",
            "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE", "DBUS_SESSION_BUS_ADDRESS")
@@ -68,7 +72,7 @@ _KEYED_PROGRAMS = ("python3", "python", "make")
 def _base_environment() -> dict[str, str]:
     env = {name: os.environ[name] for name in _PASSED if name in os.environ}
     for name, value in os.environ.items():
-        if name.startswith(_PASSED_PREFIXES):
+        if name.startswith(_PASSED_PREFIXES) and name not in LAUNCH_VARIABLES:
             env[name] = value
     return env
 
@@ -193,6 +197,9 @@ class Runner:
         self.say("%s run %s over %d units; %s" % (
             "Dry" if dry_run else mode.capitalize(), run_id, len(units),
             ", ".join("%s %s" % item for item in sorted(self.heads.items()))))
+        for repo in dict.fromkeys(unit.repo for unit in units):
+            for note in repo.notes(os.environ):
+                self.say("note: %s" % note)
         try:
             if not dry_run:
                 # A build can change what units read, so it comes before any

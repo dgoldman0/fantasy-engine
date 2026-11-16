@@ -18,6 +18,13 @@ from pathlib import Path
 
 FANTASY_ENGINE_ROOT = Path(__file__).resolve().parents[2]
 
+# Variables that a repository's launch sets for its own units: where its
+# tests find another checkout, and the pinned tools they run.  The runner
+# passes no caller's value for them, so whether a caller exported them
+# cannot split the record.  A unit that does not read them never sees them,
+# and one that does gets the same value from every caller in a workspace.
+LAUNCH_VARIABLES = frozenset(("MEGAPAD_ROOT", "AKASHIC_E2FSPROGS_TOOL_DIR"))
+
 # Units for what the first release leaves out (decision 35): Sound Lab,
 # Observatory and Worlds, audio output and the sound synthesis libraries,
 # and data graphics, the plots, waveforms and instruments of the rich
@@ -132,6 +139,12 @@ class Repo:
     def launch(self, unit: Unit, python: str) -> Launch:
         raise NotImplementedError
 
+    def notes(self, environ) -> list[str]:
+        """What a run should say about the caller's environment ENVIRON
+        before this repository's units run, such as a variable its own
+        launch sets in place of the caller's."""
+        return []
+
     def tool_folders(self, env: dict[str, str]) -> list[Path]:
         """Folders of programs this repository vouches for, given a unit's
         environment.
@@ -210,6 +223,11 @@ class AkashicRepo(PytestRepo):
     # variable is part of the launch key, so another folder is another launch.
     TOOL_FOLDER_VARIABLES = ("AKASHIC_E2FSPROGS_TOOL_DIR",)
 
+    # Where Akashic's local_testing/README.md builds that pinned e2fsprogs.
+    # A unit runs it from here unless the caller names another build.
+    PINNED_E2FSPROGS = (Path.home() / ".cache" / "fantasy-engine"
+                        / "e2fsprogs-1.47.4" / "sbin")
+
     def __init__(self, root: Path, megapad_root: Path):
         super().__init__(root)
         self.megapad_root = Path(megapad_root)
@@ -217,6 +235,26 @@ class AkashicRepo(PytestRepo):
     def pythonpath(self) -> list[Path]:
         # Some tests import MegaPad modules before the harness adds MegaPad.
         return [self.megapad_root]
+
+    def launch(self, unit: Unit, python: str) -> Launch:
+        # The tests find MegaPad through MEGAPAD_ROOT, and it is always the
+        # workspace's: the MegaPad the run's report names.
+        launch = super().launch(unit, python)
+        launch.env["MEGAPAD_ROOT"] = str(self.megapad_root)
+        tools = os.environ.get("AKASHIC_E2FSPROGS_TOOL_DIR")
+        if not tools and self.PINNED_E2FSPROGS.is_dir():
+            tools = str(self.PINNED_E2FSPROGS)
+        if tools:
+            launch.env["AKASHIC_E2FSPROGS_TOOL_DIR"] = tools
+        return launch
+
+    def notes(self, environ) -> list[str]:
+        named = environ.get("MEGAPAD_ROOT")
+        if named and Path(named).resolve() != self.megapad_root.resolve():
+            return ["MEGAPAD_ROOT names %s, but Akashic's tests use the "
+                    "workspace's MegaPad, %s; --workspace chooses another"
+                    % (named, self.megapad_root)]
+        return []
 
     def tool_folders(self, env: dict[str, str]) -> list[Path]:
         return [Path(env[name]) for name in self.TOOL_FOLDER_VARIABLES

@@ -1,14 +1,15 @@
 """Selection over a small repository: what runs, what is skipped, and why."""
 
 import io
+import os
 import subprocess
 import textwrap
 
 import pytest
 
-from fantasy_engine.testing.runner import Runner
+from fantasy_engine.testing.runner import Runner, launch_key
 from fantasy_engine.testing.store import Store
-from fantasy_engine.testing.suites import PytestRepo
+from fantasy_engine.testing.suites import AkashicRepo, PytestRepo, Unit
 
 TESTS = {
     "test_a.py": """
@@ -142,6 +143,71 @@ def test_launch_settings_belong_to_the_key(demo, store, tmp_path, monkeypatch):
     _, ran, text = run(demo, store, tmp_path)
     assert len(ran) == len(TESTS)
     assert "its launch settings changed" in text
+
+
+def test_where_a_caller_finds_megapad_or_e2fsprogs_splits_no_record(
+        demo, store, tmp_path, monkeypatch):
+    run(demo, store, tmp_path)
+    monkeypatch.setenv("MEGAPAD_ROOT", str(tmp_path / "another-megapad"))
+    monkeypatch.setenv("AKASHIC_E2FSPROGS_TOOL_DIR", str(tmp_path / "sbin"))
+    summary, ran, _ = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py"]  # it starts a program, so it always runs
+    assert summary.skipped == len(TESTS) - 1
+
+
+@pytest.fixture
+def akashic(tmp_path, monkeypatch):
+    pinned = tmp_path / "pinned-sbin"
+    pinned.mkdir()
+    monkeypatch.setattr(AkashicRepo, "PINNED_E2FSPROGS", pinned)
+    monkeypatch.delenv("MEGAPAD_ROOT", raising=False)
+    monkeypatch.delenv("AKASHIC_E2FSPROGS_TOOL_DIR", raising=False)
+    return AkashicRepo(tmp_path / "akashic", tmp_path / "megapad"), pinned
+
+
+def akashic_launch(repo, store, tmp_path):
+    """The environment and launch key of one Akashic unit, as a run makes them."""
+    runner = Runner(store, repos=[repo], out=io.StringIO(),
+                    scratch=tmp_path / "scratch", partial_root=tmp_path / "partial")
+    launch = repo.launch(Unit(repo, "local_testing/test_x.py"), runner.python)
+    env = runner.environment(launch, tmp_path / "t", tmp_path / "r")
+    return env, launch_key(launch.argv, launch.cwd, env, runner.python)
+
+
+def test_akashic_units_get_the_workspace_megapad_and_the_pinned_e2fsprogs(
+        akashic, store, tmp_path, monkeypatch):
+    repo, pinned = akashic
+    env, plain = akashic_launch(repo, store, tmp_path)
+    assert env["MEGAPAD_ROOT"] == str(tmp_path / "megapad")
+    assert env["AKASHIC_E2FSPROGS_TOOL_DIR"] == str(pinned)
+    assert repo.notes(os.environ) == []
+
+    # A caller that exports the pinned build, or names another MegaPad,
+    # launches the same unit, and the run says which MegaPad it used.
+    monkeypatch.setenv("MEGAPAD_ROOT", str(tmp_path / "another-megapad"))
+    monkeypatch.setenv("AKASHIC_E2FSPROGS_TOOL_DIR", str(pinned))
+    env, exported = akashic_launch(repo, store, tmp_path)
+    assert exported == plain
+    assert env["MEGAPAD_ROOT"] == str(tmp_path / "megapad")
+    [note] = repo.notes(os.environ)
+    assert "another-megapad" in note and str(tmp_path / "megapad") in note
+    monkeypatch.setenv("MEGAPAD_ROOT", str(tmp_path / "megapad"))
+    assert repo.notes(os.environ) == []
+
+    # Another e2fsprogs build is another launch.
+    monkeypatch.setenv("AKASHIC_E2FSPROGS_TOOL_DIR", str(tmp_path / "other-sbin"))
+    env, other = akashic_launch(repo, store, tmp_path)
+    assert other != plain
+    assert env["AKASHIC_E2FSPROGS_TOOL_DIR"] == str(tmp_path / "other-sbin")
+
+
+def test_akashic_units_lack_e2fsprogs_only_when_none_is_built_or_named(
+        akashic, store, tmp_path, monkeypatch):
+    repo, _ = akashic
+    monkeypatch.setattr(AkashicRepo, "PINNED_E2FSPROGS", tmp_path / "absent")
+    env, _ = akashic_launch(repo, store, tmp_path)
+    assert "AKASHIC_E2FSPROGS_TOOL_DIR" not in env
+    assert env["MEGAPAD_ROOT"] == str(tmp_path / "megapad")
 
 
 def test_a_dry_run_reports_without_running(demo, store, tmp_path):
