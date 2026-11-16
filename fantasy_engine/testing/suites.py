@@ -364,3 +364,86 @@ def repositories(root: Path | None = None) -> list[Repo]:
                           else root / "fantasy-engine"),
     ]
     return [repo for repo in repos if repo.present()]
+
+
+class Locations:
+    """Where the workspace's repositories sit.
+
+    The record names a path inside a repository by the repository and the
+    path there, as ``@akashic/local_testing/test_pad.py``, and a launch key
+    names a repository's folder the same way.  Another checkout of the same
+    repositories, such as a worktree, then reads the same record and
+    compares its own copy of each file, so a unit is skipped there exactly
+    when its files hold what they held at its last pass.  A path outside
+    every repository, such as Python's library or a pinned tool, keeps its
+    place.  Both the folder a repository is given as and the folder that
+    resolves to are its, since a process may name a file either way.
+
+    A listing of a folder inside a repository counts only the names that
+    the repository's git does not ignore.  pytest lists the repository's
+    folder and the test's folder on its way to every test file, and a
+    checkout gathers ignored names there, such as caches and scratch files,
+    which another checkout of the same commit lacks.  An ignored file that
+    a test reads is still an input by its own path, so a checkout without
+    it runs the test; a test that only counts ignored names, without
+    reading them, would go unnoticed, which a full run reveals.
+    """
+
+    def __init__(self, repos: list[Repo]):
+        roots: dict[str, str] = {}
+        for repo in repos:
+            for form in (os.path.abspath(repo.root), os.path.realpath(repo.root)):
+                roots.setdefault(form.rstrip(os.sep) or os.sep, repo.name)
+        # The longest folder first, so a repository inside another wins.
+        self._roots = sorted(roots.items(), key=lambda item: -len(item[0]))
+        self._folders = {repo.name: os.path.abspath(repo.root) for repo in repos}
+        self._ignored: dict[str, list[str]] = {}
+
+    def ignored(self, folder: str) -> frozenset[str]:
+        """The names in FOLDER that its repository's git ignores and does
+        not track; none for a folder outside every repository or inside an
+        ignored one, whose listing counts in full."""
+        name = self.name(folder)
+        if not name.startswith("@"):
+            return frozenset()
+        repo, _, inner = name[1:].partition("/")
+        if repo not in self._folders:
+            return frozenset()
+        if repo not in self._ignored:
+            try:
+                listed = subprocess.run(
+                    ["git", "-C", self._folders[repo], "ls-files", "-z", "--others",
+                     "--ignored", "--exclude-standard", "--directory"],
+                    check=True, capture_output=True,
+                ).stdout.decode("utf-8", "surrogateescape")
+                self._ignored[repo] = [p.rstrip("/") for p in listed.split("\0") if p]
+            except (OSError, subprocess.CalledProcessError):
+                self._ignored[repo] = []
+        prefix = inner + "/" if inner else ""
+        return frozenset(path[len(prefix):] for path in self._ignored[repo]
+                         if path.startswith(prefix) and "/" not in path[len(prefix):])
+
+    def name(self, path: str) -> str:
+        """PATH as the record names it."""
+        for root, repo in self._roots:
+            if path == root:
+                return "@" + repo
+            if path.startswith(root + os.sep):
+                return "@%s/%s" % (repo, path[len(root) + 1:])
+        return path
+
+    def names(self, value: str) -> str:
+        """VALUE, which may hold several paths as a search path does, with
+        each as the record names it."""
+        return os.pathsep.join(self.name(part) for part in value.split(os.pathsep))
+
+    def path(self, name: str) -> str:
+        """Where the record's NAME is in this workspace.  A name in a
+        repository the workspace lacks stays as it is and names no file."""
+        if not name.startswith("@"):
+            return name
+        repo, _, rest = name[1:].partition("/")
+        folder = self._folders.get(repo)
+        if folder is None:
+            return name
+        return os.path.join(folder, rest) if rest else folder

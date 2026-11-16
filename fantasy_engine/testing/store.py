@@ -3,7 +3,9 @@
 One SQLite file holds every run's metadata, the latest result of each unit
 together with the inputs that run read, and a cache of file digests keyed by
 each file's identity (device, inode, size, modification and change times),
-so a file is hashed again only after it changes.
+so a file is hashed again only after it changes.  A unit's inputs name a
+file inside a repository by the repository (``suites.Locations``), so the
+record serves every checkout of the same repositories.
 """
 
 from __future__ import annotations
@@ -152,11 +154,13 @@ class Store:
         return digest
 
     @staticmethod
-    def digest_listing(path: str) -> str:
+    def digest_listing(path: str, ignored: frozenset[str] = frozenset()) -> str:
+        """The digest of folder PATH's names, less those IGNORED."""
         names = sorted_listing(path)
         if names is None:
             return "absent"
-        return hashlib.sha256("\n".join(names).encode("utf-8", "surrogateescape")).hexdigest()
+        kept = [name for name in names if name not in ignored]
+        return hashlib.sha256("\n".join(kept).encode("utf-8", "surrogateescape")).hexdigest()
 
     @staticmethod
     def digest_imports(path: str, candidates: frozenset[str]) -> str:
@@ -183,30 +187,39 @@ class Store:
                 )
             self._new_digests.clear()
 
-    def describe(self, inputs: Inputs, unrecordable: list[str]) -> dict:
-        """Digest every input, in the form a later run compares against."""
+    def describe(self, inputs: Inputs, unrecordable: list[str],
+                 locations=None) -> dict:
+        """Digest every input, in the form a later run compares against,
+        each named as LOCATIONS names it."""
 
+        name = locations.name if locations is not None else (lambda path: path)
+        ignored = locations.ignored if locations is not None else (lambda path: frozenset())
         candidates = import_candidates(inputs.import_names)
         return {
-            "files": {path: _kept(self.digest_file(path)) for path in inputs.files},
-            "listings": {path: _kept(self.digest_listing(path))
+            "files": {name(path): _kept(self.digest_file(path))
+                      for path in inputs.files},
+            "listings": {name(path): _kept(self.digest_listing(path, ignored(path)))
                          for path in inputs.listings},
             "imports": {
-                path: _kept(self.digest_imports(path, candidates))
+                name(path): _kept(self.digest_imports(path, candidates))
                 for path in inputs.import_listings
             },
             "metadata": {
-                path: _kept(self.digest_metadata(path))
+                name(path): _kept(self.digest_metadata(path))
                 for path in inputs.metadata_listings
             },
             "import_names": inputs.import_names,
-            "state": inputs.state,
+            "state": [name(path) for path in inputs.state],
             "unrecordable": sorted(unrecordable),
         }
 
-    def changes(self, described: dict, limit: int | None = 1) -> list[Change]:
-        """The inputs whose digests differ from DESCRIBED, up to LIMIT."""
+    def changes(self, described: dict, limit: int | None = 1,
+                locations=None) -> list[Change]:
+        """The inputs whose digests differ from DESCRIBED, up to LIMIT, each
+        at the place LOCATIONS finds it in this workspace."""
 
+        where = locations.path if locations is not None else (lambda name: name)
+        ignored = locations.ignored if locations is not None else (lambda path: frozenset())
         found: list[Change] = []
 
         def note(kind: str, path: str, before: str, now: str) -> bool:
@@ -215,17 +228,21 @@ class Store:
                 found.append(Change(kind, path, before, now))
             return limit is not None and len(found) >= limit
 
-        for path, before in described["files"].items():
+        for name, before in described["files"].items():
+            path = where(name)
             if note("file", path, before, self.digest_file(path)):
                 return found
-        for path, before in described["listings"].items():
-            if note("listing", path, before, self.digest_listing(path)):
+        for name, before in described["listings"].items():
+            path = where(name)
+            if note("listing", path, before, self.digest_listing(path, ignored(path))):
                 return found
         candidates = import_candidates(described["import_names"])
-        for path, before in described["imports"].items():
+        for name, before in described["imports"].items():
+            path = where(name)
             if note("imports", path, before, self.digest_imports(path, candidates)):
                 return found
-        for path, before in described["metadata"].items():
+        for name, before in described["metadata"].items():
+            path = where(name)
             if note("metadata", path, before, self.digest_metadata(path)):
                 return found
         return found

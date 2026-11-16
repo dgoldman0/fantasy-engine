@@ -48,7 +48,7 @@ from typing import TextIO
 from . import records
 from .recorder.fe_cases import PASSED_ENV, RESUME_ENV
 from .store import Result, Store
-from .suites import LAUNCH_VARIABLES, Repo, Unit
+from .suites import LAUNCH_VARIABLES, Locations, Repo, Unit
 
 RECORDER_DIR = Path(__file__).resolve().parent / "recorder"
 RAM = Path("/dev/shm")
@@ -93,14 +93,20 @@ def _program_identity(program: str | None) -> str:
     return _versions[real]
 
 
-def launch_key(argv: list[str], cwd: Path, env: dict[str, str], python: str) -> str:
-    keyed_env = {k: v for k, v in env.items() if k not in _UNKEYED}
+def launch_key(argv: list[str], cwd: Path, env: dict[str, str], python: str,
+               locations: Locations | None = None) -> str:
+    """The digest of what a unit's launch decides.  With LOCATIONS, a path
+    inside a repository counts by its repository, so every checkout of the
+    same repositories launches a unit the same way."""
+    named = locations.names if locations is not None else (lambda value: value)
+    keyed_env = {k: named(v) for k, v in env.items() if k not in _UNKEYED}
     programs = {name: _program_identity(shutil.which(name, path=env.get("PATH")))
                 for name in _KEYED_PROGRAMS}
     programs["interpreter"] = _program_identity(python)
     programs["interpreter-version"] = sys.version
-    text = json.dumps({"argv": argv, "cwd": str(cwd), "env": keyed_env,
-                       "programs": programs}, sort_keys=True)
+    folder = named(os.path.abspath(cwd)) if locations is not None else str(cwd)
+    text = json.dumps({"argv": [named(arg) for arg in argv], "cwd": folder,
+                       "env": keyed_env, "programs": programs}, sort_keys=True)
     return hashlib.sha256(text.encode()).hexdigest()
 
 
@@ -128,7 +134,8 @@ class Decision:
     previous: Result | None = None
 
 
-def decide(unit: Unit, key: str, store: Store) -> Decision:
+def decide(unit: Unit, key: str, store: Store,
+           locations: Locations | None = None) -> Decision:
     previous = store.latest_pass(unit.id)
     if previous is None:
         return Decision(False, "no passing run on record")
@@ -137,7 +144,7 @@ def decide(unit: Unit, key: str, store: Store) -> Decision:
     unrecordable = previous.inputs.get("unrecordable") or []
     if unrecordable:
         return Decision(False, "it starts %s" % unrecordable[0], previous)
-    changed = store.changes(previous.inputs, limit=1)
+    changed = store.changes(previous.inputs, limit=1, locations=locations)
     if changed:
         return Decision(False, "changed: %s" % changed[0], previous)
     return Decision(True, "unchanged", previous)
@@ -161,6 +168,7 @@ class Runner:
                  timeout: float | None = None, partial_root: Path | None = None):
         self.store = store
         self.repos = repos
+        self.locations = Locations(repos)
         self.out = out
         self.python = python
         # Short names: pytest's temporary folders, and any Unix sockets in
@@ -244,10 +252,15 @@ class Runner:
         return self.partial_root / hashlib.sha256(unit.id.encode()).hexdigest()[:16]
 
     def resumable(self, partial: Path, unit: Unit, key: str,
-                  tool_folders: list[Path] | tuple[Path, ...] = ()) -> int:
+                  tool_folders: list[Path] | tuple[Path, ...] = (),
+                  cwd: Path | None = None) -> int:
         """How many tests an interrupted attempt of UNIT passed, when it can
-        resume: same launch key, every read recorded, and nothing it read
-        changed after it stopped.  0 when there is nothing to resume.
+        resume: same launch key, same checkout, every read recorded, and
+        nothing it read changed after it stopped.  0 when there is nothing
+        to resume.  The attempt's reads name its own checkout's files, so an
+        attempt in another checkout, which launches with the same key, is
+        no evidence about this one's: CWD, the unit's folder, tells them
+        apart.
 
         A program the attempt started counts as read in full when it lies
         in one of TOOL_FOLDERS, the folders the unit's repository declares;
@@ -266,6 +279,8 @@ class Runner:
         except (OSError, ValueError):
             return 0
         if meta.get("unit") != unit.id or meta.get("key") != key or not passed:
+            return 0
+        if cwd is not None and meta.get("cwd") != os.path.abspath(cwd):
             return 0
         seen = records.load(partial / "records")
         tools, unrecorded = seen.started_tools(tool_folders)
@@ -314,11 +329,11 @@ class Runner:
         record, passed = partial / "records", partial / "passed"
         env = self.environment(launch, tmp, record)
         env[PASSED_ENV] = str(passed)
-        key = launch_key(launch.argv, launch.cwd, env, self.python)
+        key = launch_key(launch.argv, launch.cwd, env, self.python, self.locations)
         if not dry_run:
             self.stop_orphan(partial)
         tool_folders = unit.repo.tool_folders(env)
-        decision = decide(unit, key, self.store)
+        decision = decide(unit, key, self.store, self.locations)
         if decision.skip and not full:
             if not dry_run:
                 shutil.rmtree(partial, ignore_errors=True)
@@ -327,7 +342,8 @@ class Runner:
             self.say("SKIP  %s  unchanged since %s" % (
                 unit.id, self.describe_previous(decision.previous)))
             return
-        resumed = 0 if full else self.resumable(partial, unit, key, tool_folders)
+        resumed = 0 if full else self.resumable(partial, unit, key, tool_folders,
+                                                launch.cwd)
         note = "; resumes after %d passed tests" % resumed if resumed else ""
         if dry_run:
             summary.ran += 1
@@ -343,7 +359,7 @@ class Runner:
             started_ns = time.time_ns()
             (partial / "meta.json").write_text(json.dumps({
                 "unit": unit.id, "key": key, "started_ns": started_ns,
-                "tmp": str(tmp)}))
+                "tmp": str(tmp), "cwd": os.path.abspath(launch.cwd)}))
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         logs = self.logs_root / run_id
@@ -367,7 +383,7 @@ class Runner:
             unrecordable.append("a recorder error (%s)" % seen.errors[0])
         if not seen.processes:
             unrecordable.append("no recorded Python process")
-        described = self.store.describe(inputs, unrecordable)
+        described = self.store.describe(inputs, unrecordable, self.locations)
         moved = self.changed_during(inputs, started_ns)
 
         outcome = unit.repo.outcome(returncode)

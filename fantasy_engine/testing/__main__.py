@@ -110,11 +110,13 @@ def main(argv: list[str] | None = None) -> int:
                 launch = unit.repo.launch(unit, runner.python)
                 env = runner.environment(launch, runner.scratch / "t",
                                          runner.scratch / "r")
-                decision = decide(unit, launch_key(launch.argv, launch.cwd, env,
-                                                   runner.python), store)
+                key = launch_key(launch.argv, launch.cwd, env, runner.python,
+                                 runner.locations)
+                decision = decide(unit, key, store, runner.locations)
                 print("%s: %s" % (unit.id, "unchanged" if decision.skip else decision.reason))
                 if decision.previous is not None and not decision.skip:
-                    for change in store.changes(decision.previous.inputs, limit=None)[:20]:
+                    for change in store.changes(decision.previous.inputs, limit=None,
+                                                locations=runner.locations)[:20]:
                         print("    %s" % change)
             return 0
         with Lock():

@@ -2,6 +2,7 @@
 
 import io
 import os
+import shutil
 import subprocess
 import textwrap
 
@@ -9,7 +10,7 @@ import pytest
 
 from fantasy_engine.testing.runner import Runner, launch_key
 from fantasy_engine.testing.store import Store
-from fantasy_engine.testing.suites import AkashicRepo, PytestRepo, Unit
+from fantasy_engine.testing.suites import AkashicRepo, Locations, PytestRepo, Unit
 
 TESTS = {
     "test_a.py": """
@@ -449,3 +450,90 @@ def test_akashic_declares_the_folder_its_tool_variable_names(tmp_path):
     # A repository declares nothing unless it says so.
     assert Repo(tmp_path).tool_folders(
         {"AKASHIC_E2FSPROGS_TOOL_DIR": "/opt/e2fsprogs/sbin"}) == []
+
+
+def checkout_copy(demo, tmp_path, name="copy"):
+    """Another checkout of the demo repository, as a worktree would be."""
+    copy = tmp_path / name
+    shutil.copytree(demo.root, copy, symlinks=True)
+    return DemoRepo(copy, [copy / "first", copy / "second"])
+
+
+def test_another_checkout_skips_the_units_whose_files_are_the_same(
+        demo, store, tmp_path):
+    run(demo, store, tmp_path)
+    other = checkout_copy(demo, tmp_path)
+    summary, ran, _ = run(other, store, tmp_path)
+    assert ran == ["tests/test_d.py"]  # it starts a program, so it always runs
+    assert summary.skipped == len(TESTS) - 1
+
+    (other.root / "data" / "a.txt").write_text("a2")
+    _, ran, text = run(other, store, tmp_path)
+    assert ran == ["tests/test_a.py", "tests/test_d.py"]
+    assert "changed: %s" % (other.root / "data" / "a.txt") in text
+
+    # The record now holds the copy's pass, and the first checkout's a.txt
+    # differs from the copy's.
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == ["tests/test_a.py", "tests/test_d.py"]
+    assert "changed: %s" % (demo.root / "data" / "a.txt") in text
+
+
+def test_an_interrupted_unit_resumes_only_in_its_own_checkout(
+        demo, store, tmp_path, monkeypatch, resumable):
+    unit, flag, ran = resumable
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("")
+    with monkeypatch.context() as patch:
+        interrupted_after_its_unit(patch)
+        with pytest.raises(KeyboardInterrupt):
+            run(demo, store, tmp_path, units=unit)
+    flag.unlink()
+    other = checkout_copy(demo, tmp_path)
+    copied = [u for u in other.units() if u.name == "tests/test_r.py"]
+    summary, _, text = run(other, store, tmp_path, units=copied)
+    assert "resumed" not in text
+    assert ran.read_text().split() == ["one", "two", "three"] * 2
+    assert not summary.failed
+
+
+def test_locations_name_a_repository_path_alike_from_every_checkout(tmp_path):
+    real = tmp_path / "real-akashic"
+    real.mkdir()
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "akashic").symlink_to(real)
+    places = Locations([AkashicRepo(workspace / "akashic", workspace / "megapad")])
+
+    # The folder the repository is given as and the one it resolves to.
+    for form in (workspace / "akashic" / "x.f", real / "x.f"):
+        assert places.name(str(form)) == "@akashic/x.f"
+    assert places.name(str(real)) == "@akashic"
+    # A folder whose name merely begins the same is another folder.
+    beside = tmp_path / "real-akashic-old" / "x.f"
+    assert places.name(str(beside)) == str(beside)
+    assert places.names(os.pathsep.join([str(real / "a"), "/usr/lib"])) == \
+        os.pathsep.join(["@akashic/a", "/usr/lib"])
+
+    assert places.path("@akashic/x.f") == str(workspace / "akashic" / "x.f")
+    assert places.path("@akashic") == str(workspace / "akashic")
+    assert places.path("/usr/lib/x") == "/usr/lib/x"
+    # A repository this workspace lacks names no file.
+    assert places.path("@lm1/emu/x.py") == "@lm1/emu/x.py"
+
+
+def test_a_listing_counts_the_names_its_repository_does_not_ignore(
+        demo, store, tmp_path):
+    (demo.root / ".gitignore").write_text("*.scratch\n")
+    git = ["git", "-C", str(demo.root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["add", ".gitignore"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "ignore scratch"], check=True)
+    run(demo, store, tmp_path)
+    other = checkout_copy(demo, tmp_path)
+    (other.root / "notes.scratch").write_text("")
+    summary, ran, _ = run(other, store, tmp_path)
+    assert ran == ["tests/test_d.py"]
+    assert summary.skipped == len(TESTS) - 1
+    (other.root / "notes.txt").write_text("")
+    _, ran, text = run(other, store, tmp_path)
+    assert "changed: listing of %s" % other.root in text
