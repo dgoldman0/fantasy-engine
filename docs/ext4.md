@@ -120,7 +120,6 @@ bd vol VOL-RAW THROW
 
 524288 A-XMEM ARENA-NEW THROW CONSTANT fs-arena
 fs-arena vol EXT4-NEW THROW CONSTANT fs
-fs VFS-USE
 fs VFS-DIR
 
 S" notes.txt" VFS-FF-READ fs VFS-OPEN? THROW CONSTANT fd
@@ -181,7 +180,6 @@ writer-arena 16 16 8 fs EXT4-BIND-WRITER-ARENA? THROW
 : now-ms  ( clock-context -- epoch-ms ior )  DROP DT-NOW-MS 0 ;
 ' now-ms 0 fs EXT4-BIND-WRITE-CLOCK? THROW
 
-fs VFS-USE
 S" log.txt" fs VFS-MKFILE? THROW DROP
 S" log.txt" VFS-FF-WRITE VFS-FF-APPEND OR fs VFS-OPEN? THROW CONSTANT log
 S" first entry" log VFS-WRITE-EXACT THROW
