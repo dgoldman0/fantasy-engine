@@ -23,7 +23,8 @@ FANTASY_ENGINE_ROOT = Path(__file__).resolve().parents[2]
 # passes no caller's value for them, so whether a caller exported them
 # cannot split the record.  A unit that does not read them never sees them,
 # and one that does gets the same value from every caller in a workspace.
-LAUNCH_VARIABLES = frozenset(("MEGAPAD_ROOT", "AKASHIC_E2FSPROGS_TOOL_DIR"))
+LAUNCH_VARIABLES = frozenset(("MEGAPAD_ROOT", "AKASHIC_E2FSPROGS_TOOL_DIR",
+                              "AKASHIC_EXT4_BACKEND"))
 
 # Units for what the first release leaves out (decision 35): Sound Lab,
 # Observatory and Worlds, audio output and the sound synthesis libraries,
@@ -78,6 +79,14 @@ OUTSIDE_RELEASE: frozenset[str] = frozenset((
 # tests and peak near 6.7 GiB.
 FINAL_ONLY: frozenset[str] = frozenset((
     "megapad:tests/test_system.py",
+    # Akashic's ext4 files run on the simulator with each change; on the
+    # emulator, the device-faithful reference, they run whole at the end of
+    # each step of the release plan and in its final run, about two hours
+    # and 5.4 GiB at the peak.
+    "akashic:local_testing/test_vfs_ext4.py@emulator",
+    "akashic:local_testing/test_vfs_ext4_user_volume.py@emulator",
+    "akashic:local_testing/test_vfs_ext4_retained_orphan.py@emulator",
+    "akashic:local_testing/test_vfs_replace_ext4.py@emulator",
 ))
 
 
@@ -228,6 +237,14 @@ class AkashicRepo(PytestRepo):
     PINNED_E2FSPROGS = (Path.home() / ".cache" / "fantasy-engine"
                         / "e2fsprogs-1.47.4" / "sbin")
 
+    # The ext4 files that run on the simulator by default, and on the
+    # emulator as units named with this suffix (see FINAL_ONLY).
+    EXT4_FILES = ("local_testing/test_vfs_ext4.py",
+                  "local_testing/test_vfs_ext4_user_volume.py",
+                  "local_testing/test_vfs_ext4_retained_orphan.py",
+                  "local_testing/test_vfs_replace_ext4.py")
+    ON_EMULATOR = "@emulator"
+
     def __init__(self, root: Path, megapad_root: Path):
         super().__init__(root)
         self.megapad_root = Path(megapad_root)
@@ -236,11 +253,24 @@ class AkashicRepo(PytestRepo):
         # Some tests import MegaPad modules before the harness adds MegaPad.
         return [self.megapad_root]
 
+    def units(self) -> list[Unit]:
+        units = super().units()
+        present = {unit.name for unit in units}
+        return units + [Unit(self, name + self.ON_EMULATOR)
+                        for name in self.EXT4_FILES if name in present]
+
     def launch(self, unit: Unit, python: str) -> Launch:
+        # A unit named with ON_EMULATOR runs its file with the emulator
+        # chosen; every other unit takes the harness's default machine.
+        on_emulator = unit.name.endswith(self.ON_EMULATOR)
+        if on_emulator:
+            unit = Unit(self, unit.name[:-len(self.ON_EMULATOR)])
         # The tests find MegaPad through MEGAPAD_ROOT, and it is always the
         # workspace's: the MegaPad the run's report names.
         launch = super().launch(unit, python)
         launch.env["MEGAPAD_ROOT"] = str(self.megapad_root)
+        if on_emulator:
+            launch.env["AKASHIC_EXT4_BACKEND"] = "emulator"
         tools = os.environ.get("AKASHIC_E2FSPROGS_TOOL_DIR")
         if not tools and self.PINNED_E2FSPROGS.is_dir():
             tools = str(self.PINNED_E2FSPROGS)
@@ -285,15 +315,19 @@ class MegaPadRepo(Repo):
         super().__init__(root)
         self._pytest_settings: str | None = None
 
+    def make_variable(self, name: str) -> str:
+        """The value the Makefile gives NAME, empty when it gives none."""
+        return subprocess.run(
+            ["make", "-s", "--no-print-directory", "--eval",
+             "fe-print-%: ; @echo $($*)", "fe-print-" + name],
+            cwd=self.root, check=True, capture_output=True, text=True,
+        ).stdout.strip()
+
     def pytest_settings(self) -> str:
         """PYTEST_CONFIG_ARGS as the Makefile sets it, with the cache off and
         fe_cases on."""
         if self._pytest_settings is None:
-            printed = subprocess.run(
-                ["make", "-s", "--no-print-directory", "--eval",
-                 "fe-print-%: ; @echo $($*)", "fe-print-PYTEST_CONFIG_ARGS"],
-                cwd=self.root, check=True, capture_output=True, text=True,
-            ).stdout.strip()
+            printed = self.make_variable("PYTEST_CONFIG_ARGS")
             self._pytest_settings = (
                 "%s -p no:cacheprovider -p fe_cases" % printed).strip()
         return self._pytest_settings
@@ -301,6 +335,14 @@ class MegaPadRepo(Repo):
     def prepare(self, env: dict[str, str]) -> None:
         subprocess.run(["make", "--no-print-directory", "accel"], cwd=self.root,
                        env=env, check=True, stdout=subprocess.DEVNULL)
+        # The simulator's extension holds services the simulator needs
+        # whichever executor runs Forth, and every repository's tests start
+        # simulators.  Its library is a file target that make rebuilds only
+        # when a source is newer, so a current build costs nothing here.
+        library = self.make_variable("SIMULATOR_ACCEL_LIB")
+        if library:
+            subprocess.run(["make", "--no-print-directory", library], cwd=self.root,
+                           env=env, check=True, stdout=subprocess.DEVNULL)
 
     def units(self) -> list[Unit]:
         names = self.tracked("tests/*test_*.py")

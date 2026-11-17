@@ -567,3 +567,64 @@ def test_a_listing_counts_the_names_its_repository_does_not_ignore(
     (other.root / "notes.txt").write_text("")
     _, ran, text = run(other, store, tmp_path)
     assert "changed: listing of %s" % other.root in text
+
+
+def test_akashic_runs_its_ext4_files_on_the_emulator_as_final_units(
+        tmp_path, store, monkeypatch):
+    from fantasy_engine.testing.suites import FINAL_ONLY
+
+    root = tmp_path / "akashic"
+    (root / "local_testing").mkdir(parents=True)
+    for name in ("test_vfs_ext4.py", "test_vfs_replace_ext4.py", "test_pad.py"):
+        (root / "local_testing" / name).write_text("def test_x():\n    pass\n")
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "akashic"], check=True)
+    repo = AkashicRepo(root, tmp_path / "megapad")
+
+    names = [unit.name for unit in repo.units()]
+    assert "local_testing/test_vfs_ext4.py@emulator" in names
+    assert "local_testing/test_vfs_replace_ext4.py@emulator" in names
+    assert not any(name.startswith("local_testing/test_pad.py@") for name in names)
+    sets = {unit.name: unit.set for unit in repo.units()}
+    assert sets["local_testing/test_vfs_ext4.py"] == "release"
+    assert sets["local_testing/test_vfs_ext4.py@emulator"] == "final"
+    assert "akashic:local_testing/test_vfs_ext4.py@emulator" in FINAL_ONLY
+
+    # A caller's choice of machine reaches no unit; the emulator units choose
+    # it themselves and run the file itself.
+    monkeypatch.setenv("AKASHIC_EXT4_BACKEND", "emulator")
+    runner = Runner(store, repos=[repo], out=io.StringIO(),
+                    scratch=tmp_path / "scratch", partial_root=tmp_path / "partial")
+    plain = repo.launch(Unit(repo, "local_testing/test_vfs_ext4.py"), runner.python)
+    plain_env = runner.environment(plain, tmp_path / "t", tmp_path / "r")
+    assert "AKASHIC_EXT4_BACKEND" not in plain_env
+    on_emulator = repo.launch(Unit(repo, "local_testing/test_vfs_ext4.py@emulator"),
+                              runner.python)
+    emulator_env = runner.environment(on_emulator, tmp_path / "t", tmp_path / "r")
+    assert emulator_env["AKASHIC_EXT4_BACKEND"] == "emulator"
+    assert on_emulator.argv[-1] == "local_testing/test_vfs_ext4.py"
+    # The same file on the two machines is launched two ways.
+    assert launch_key(plain.argv, plain.cwd, plain_env, runner.python) != \
+        launch_key(on_emulator.argv, on_emulator.cwd, emulator_env, runner.python)
+
+
+def test_megapad_prepare_builds_the_simulator_library_its_makefile_names(tmp_path):
+    from fantasy_engine.testing.suites import MegaPadRepo
+
+    with_library = tmp_path / "with"
+    with_library.mkdir()
+    (with_library / "Makefile").write_text(
+        "SIMULATOR_ACCEL_LIB := libsim.so\n"
+        "accel:\n\t@true\n"
+        "$(SIMULATOR_ACCEL_LIB): source.cpp\n\t@cp source.cpp $@\n")
+    (with_library / "source.cpp").write_text("one\n")
+    MegaPadRepo(with_library).prepare(dict(os.environ))
+    assert (with_library / "libsim.so").read_text() == "one\n"
+
+    without = tmp_path / "without"
+    without.mkdir()
+    (without / "Makefile").write_text("accel:\n\t@true\n")
+    MegaPadRepo(without).prepare(dict(os.environ))
+    assert sorted(p.name for p in without.iterdir()) == ["Makefile"]
