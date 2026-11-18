@@ -215,7 +215,9 @@ class PytestRepo(Repo):
         if returncode == 0:
             return "passed"
         if returncode == 5:
-            return "empty"  # nothing to collect, as in a standalone driver
+            # pytest collected no test, as from a file that only holds a
+            # standalone driver: the unit ran nothing (store.EMPTY).
+            return "empty"
         return "failed"
 
 

@@ -11,6 +11,16 @@ reported as unchanged since that run.  A full run executes every unit and
 checks the selection: a unit the selection would have skipped that now gives
 a different result reveals an input the recording missed.
 
+A unit can run and test nothing: pytest collects no test from a file that
+holds only a standalone driver, and the unit ends as empty.  The skip takes
+that result as it takes a pass, since pytest would again find nothing while
+nothing it read has changed, but every report keeps it apart from a pass.
+The summary counts the units that ran nothing beside those that passed, a
+skipped unit's line says when the run it relies on ran nothing, a dry run
+marks each unit to run whose last run ran nothing, and a full run counts a
+unit that now passes where it ran nothing, or now runs nothing where it
+passed, as a missed input.
+
 Units run sequentially, each in a process of its own, with throwaway files
 in /dev/shm, which is RAM, and a pinned PYTHONHASHSEED.
 
@@ -48,7 +58,7 @@ from typing import TextIO
 
 from . import records
 from .recorder.fe_cases import PASSED_ENV, RESUME_ENV
-from .store import Result, Store
+from .store import EMPTY, PASSING, Result, Store
 from .suites import LAUNCH_VARIABLES, Locations, Repo, Unit
 
 RECORDER_DIR = Path(__file__).resolve().parent / "recorder"
@@ -155,8 +165,11 @@ def decide(unit: Unit, key: str, store: Store,
 class Summary:
     ran: int = 0
     passed: int = 0
+    empty: list[str] = field(default_factory=list)  # ran, and ran nothing
     failed: list[str] = field(default_factory=list)
     skipped: int = 0
+    skipped_empty: int = 0  # skipped on a run in which they ran nothing
+    last_empty: int = 0     # a dry run's units to run whose last run ran nothing
     skipped_seconds: float = 0.0
     ran_seconds: float = 0.0
     missed: list[str] = field(default_factory=list)
@@ -192,6 +205,18 @@ class Runner:
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(result.finished))
         heads = ", ".join("%s %s" % item for item in sorted(info.get("heads", {}).items()))
         return "%s (%s; %s)" % (result.run_id, when, heads)
+
+    def unchanged(self, previous: Result) -> str:
+        """Why a unit is skipped: the run it relies on, and whether the
+        unit ran nothing there."""
+        text = "unchanged since %s" % self.describe_previous(previous)
+        if previous.ran_nothing:
+            text += ", in which it ran nothing"
+        return text
+
+    def last_ran_nothing(self, unit: Unit) -> bool:
+        last = self.store.latest(unit.id)
+        return last is not None and last.ran_nothing
 
     def run(self, units: list[Unit], *, full: bool = False, dry_run: bool = False) -> Summary:
         summary = Summary()
@@ -340,14 +365,18 @@ class Runner:
                 shutil.rmtree(partial, ignore_errors=True)
             summary.skipped += 1
             summary.skipped_seconds += decision.previous.duration
-            self.say("SKIP  %s  unchanged since %s" % (
-                unit.id, self.describe_previous(decision.previous)))
+            if decision.previous.ran_nothing:
+                summary.skipped_empty += 1
+            self.say("SKIP  %s  %s" % (unit.id, self.unchanged(decision.previous)))
             return
         resumed = 0 if full else self.resumable(partial, unit, key, tool_folders,
                                                 launch.cwd)
         note = "; resumes after %d passed tests" % resumed if resumed else ""
         if dry_run:
             summary.ran += 1
+            if self.last_ran_nothing(unit):
+                summary.last_empty += 1
+                note += "; it ran nothing at its last run"
             self.say("RUN?  %s  %s%s" % (unit.id, decision.reason, note))
             return
 
@@ -388,10 +417,10 @@ class Runner:
         moved = self.changed_during(inputs, started_ns)
 
         outcome = unit.repo.outcome(returncode)
-        if resumed and outcome == "empty":
+        if resumed and outcome == EMPTY:
             outcome = "passed"  # its interrupted attempt passed every test
         note = "" if not moved else "inputs changed while it ran: %s" % moved[0]
-        if moved and outcome in ("passed", "empty"):
+        if moved and outcome in PASSING:
             outcome = "unsettled"
             summary.unsettled.append(unit.id)
         self.store.record(Result(unit.id, run_id, outcome, duration, time.time(),
@@ -402,9 +431,20 @@ class Runner:
         detail = "%s in %.1f s, peak %d MiB" % (outcome, duration, peak_kib // 1024)
         if resumed:
             detail += ", resumed after %d passed tests" % resumed
-        if outcome in ("passed", "empty"):
-            summary.passed += 1
+        if outcome in PASSING:
+            if outcome == EMPTY:
+                summary.empty.append(unit.id)
+                detail += "; it ran nothing"
+            else:
+                summary.passed += 1
             log_path.unlink(missing_ok=True)
+            # A passing result its record did not predict is as much a
+            # missed input as a failure: tests that appeared, or vanished,
+            # while nothing the unit read changed.
+            if full and decision.skip and outcome != decision.previous.outcome:
+                summary.missed.append(unit.id)
+                detail += ("; MISSED INPUT: the selection would have skipped it "
+                           "as %s" % self.unchanged(decision.previous))
         elif outcome == "failed":
             summary.failed.append(unit.id)
             detail = "FAILED (exit %d) in %.1f s; log %s" % (returncode, duration, log_path)
@@ -460,16 +500,25 @@ class Runner:
         return moved
 
     def report(self, summary: Summary, *, dry_run: bool) -> None:
+        work = " (about %.0f s of recorded work)" % summary.skipped_seconds
+        if summary.skipped_empty:
+            work += (", %d of which ran nothing in the run they rely on"
+                     % summary.skipped_empty)
         if dry_run:
-            self.say("Would run %d units and skip %d (about %.0f s of recorded work)." % (
-                summary.ran, summary.skipped, summary.skipped_seconds))
+            would_run = "%d units" % summary.ran
+            if summary.last_empty:
+                would_run += (", %d of which ran nothing at their last run,"
+                              % summary.last_empty)
+            self.say("Would run %s and skip %d%s." % (would_run, summary.skipped, work))
             return
-        self.say("Ran %d units in %.0f s: %d passed, %d failed%s. Skipped %d unchanged "
-                 "units (about %.0f s of recorded work)." % (
-                     summary.ran, summary.ran_seconds, summary.passed,
-                     len(summary.failed),
-                     ", %d unsettled" % len(summary.unsettled) if summary.unsettled else "",
-                     summary.skipped, summary.skipped_seconds))
+        counts = ["%d passed" % summary.passed]
+        if summary.empty:
+            counts.append("%d ran nothing" % len(summary.empty))
+        counts.append("%d failed" % len(summary.failed))
+        if summary.unsettled:
+            counts.append("%d unsettled" % len(summary.unsettled))
+        self.say("Ran %d units in %.0f s: %s. Skipped %d unchanged units%s." % (
+            summary.ran, summary.ran_seconds, ", ".join(counts), summary.skipped, work))
         for unit in summary.failed:
             self.say("  failed: %s" % unit)
         for unit in summary.missed:

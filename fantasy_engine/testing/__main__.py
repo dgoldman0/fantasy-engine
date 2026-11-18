@@ -13,6 +13,12 @@ change (``release``, the default), those plus the units that wait for the
 release's final run (``final``), the units for what the release leaves out
 (``outside``), or every unit (``all``).  ``--recorded`` keeps only units the
 record already holds, which the selection can judge without running them.
+
+A unit can run and test nothing, as a test file that holds only a standalone
+driver does under pytest.  Every command says so: ``run`` counts those units
+apart from the passes and says when the run a skipped unit relies on ran
+nothing, and a dry run, ``list`` and ``explain`` mark each unit whose last
+run ran nothing.
 """
 
 from __future__ import annotations
@@ -23,7 +29,7 @@ import sys
 from pathlib import Path
 
 from .runner import Lock, Runner, decide, launch_key
-from .store import Store
+from .store import EMPTY, Store
 from .suites import FINAL_ONLY, OUTSIDE_RELEASE, Unit, repositories
 
 _SETS = {
@@ -101,8 +107,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         repos, units = _select(args, store)
         if args.command == "list":
+            outcomes = store.latest_outcomes()
             for unit in units:
-                print(unit.id)
+                print(unit.id + ("  (ran nothing at its last run)"
+                                 if outcomes.get(unit.id) == EMPTY else ""))
             return 0
         if args.command == "explain":
             runner = Runner(store, repos=repos)
@@ -113,7 +121,13 @@ def main(argv: list[str] | None = None) -> int:
                 key = launch_key(launch.argv, launch.cwd, env, runner.python,
                                  runner.locations)
                 decision = decide(unit, key, store, runner.locations)
-                print("%s: %s" % (unit.id, "unchanged" if decision.skip else decision.reason))
+                if decision.skip:
+                    why = runner.unchanged(decision.previous)
+                else:
+                    why = decision.reason
+                    if runner.last_ran_nothing(unit):
+                        why += "; it ran nothing at its last run"
+                print("%s: %s" % (unit.id, why))
                 if decision.previous is not None and not decision.skip:
                     for change in store.changes(decision.previous.inputs, limit=None,
                                                 locations=runner.locations)[:20]:

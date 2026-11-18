@@ -221,6 +221,122 @@ def test_a_dry_run_reports_without_running(demo, store, tmp_path):
     assert store.latest("demo:tests/test_b.py").run_id == before
 
 
+STANDALONE = """
+    def main():
+        print("a driver that runs on its own")
+
+
+    if __name__ == "__main__":
+        main()
+"""
+
+
+def commit_file(root, name, source, message):
+    (root / name).write_text(textwrap.dedent(source))
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", message], check=True)
+
+
+def unit_line(text, unit_id):
+    [line] = [line for line in text.splitlines() if "  %s  " % unit_id in line]
+    return line
+
+
+def test_a_unit_that_ran_nothing_is_reported_apart_from_the_passes(
+        demo, store, tmp_path):
+    commit_file(demo.root, "tests/test_s.py", STANDALONE, "standalone")
+    units = [u for u in demo.units() if u.name in ("tests/test_a.py", "tests/test_s.py")]
+    summary, ran, text = run(demo, store, tmp_path, units=units)
+    assert ran == ["tests/test_a.py", "tests/test_s.py"]
+    assert summary.passed == 1 and summary.empty == ["demo:tests/test_s.py"]
+    line = unit_line(text, "demo:tests/test_s.py")
+    assert "no passing run on record -> empty in" in line
+    assert line.endswith("; it ran nothing")
+    assert ": 1 passed, 1 ran nothing, 0 failed." in text
+
+    # It is skipped while unchanged, as a pass is, and its line says that
+    # the run it relies on ran nothing.
+    summary, ran, text = run(demo, store, tmp_path, units=units)
+    assert ran == [] and summary.skipped == 2 and summary.skipped_empty == 1
+    assert unit_line(text, "demo:tests/test_s.py").endswith(", in which it ran nothing")
+    assert "ran nothing" not in unit_line(text, "demo:tests/test_a.py")
+    assert "1 of which ran nothing in the run they rely on." in text
+
+    # A dry run marks a unit to run whose last run ran nothing.
+    (demo.root / "tests" / "test_s.py").write_text(
+        textwrap.dedent(STANDALONE) + "# changed\n")
+    summary, ran, text = run(demo, store, tmp_path, units=units, dry_run=True)
+    assert ran == ["tests/test_s.py"] and summary.last_empty == 1
+    assert unit_line(text, "demo:tests/test_s.py").endswith(
+        "; it ran nothing at its last run")
+    assert "Would run 1 units, 1 of which ran nothing at their last run, and skip 1 " in text
+
+
+COLLECTED_WHEN_FLAGGED = """
+    import os
+
+    # os.path.exists raises no audit event, so this read goes unrecorded.
+    if os.path.exists("data/collect"):
+        def test_now_collected():
+            pass
+"""
+
+
+def test_a_full_run_finds_tests_that_appeared_where_the_unit_ran_nothing(
+        demo, store, tmp_path):
+    commit_file(demo.root, "tests/test_f.py", COLLECTED_WHEN_FLAGGED, "flagged")
+    unit = [u for u in demo.units() if u.name == "tests/test_f.py"]
+    summary, _, _ = run(demo, store, tmp_path, units=unit)
+    assert summary.empty == ["demo:tests/test_f.py"]
+    (demo.root / "data" / "collect").write_text("")
+    _, ran, _ = run(demo, store, tmp_path, units=unit)
+    assert ran == []  # wrongly skipped
+    summary, ran, text = run(demo, store, tmp_path, units=unit, full=True)
+    assert summary.passed == 1 and summary.missed == ["demo:tests/test_f.py"]
+    assert "MISSED INPUT: the selection would have skipped it as unchanged since" in text
+    assert unit_line(text, "demo:tests/test_f.py").endswith(", in which it ran nothing")
+
+
+def test_list_and_explain_mark_a_unit_whose_last_run_ran_nothing(
+        tmp_path, store, capsys):
+    from fantasy_engine.testing.__main__ import main
+    from fantasy_engine.testing.suites import repositories
+
+    workspace = tmp_path / "ws"
+    root = workspace / "akashic"
+    (root / "local_testing").mkdir(parents=True)
+    (root / "local_testing" / "test_p.py").write_text("def test_p():\n    pass\n")
+    (root / "local_testing" / "test_s.py").write_text(textwrap.dedent(STANDALONE))
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "akashic"], check=True)
+    [repo] = repositories(workspace)
+    Runner(store, repos=[repo], out=io.StringIO(), scratch=tmp_path / "scratch",
+           partial_root=tmp_path / "partial").run(repo.units())
+    common = ["--workspace", str(workspace), "--store", str(store.path)]
+
+    main(["list", "--recorded", *common])
+    listed = capsys.readouterr().out.splitlines()
+    assert listed == ["akashic:local_testing/test_p.py",
+                      "akashic:local_testing/test_s.py  (ran nothing at its last run)"]
+
+    main(["explain", *common])
+    explained = capsys.readouterr().out.splitlines()
+    assert explained[0].startswith("akashic:local_testing/test_p.py: unchanged since ")
+    assert "ran nothing" not in explained[0]
+    assert explained[1].startswith("akashic:local_testing/test_s.py: unchanged since ")
+    assert explained[1].endswith(", in which it ran nothing")
+
+    (root / "local_testing" / "test_s.py").write_text(
+        textwrap.dedent(STANDALONE) + "# changed\n")
+    main(["explain", "test_s", *common])
+    explained = capsys.readouterr().out.splitlines()
+    assert explained[0].startswith("akashic:local_testing/test_s.py: changed: ")
+    assert explained[0].endswith("; it ran nothing at its last run")
+
+
 RESUMABLE = """
     import os
 

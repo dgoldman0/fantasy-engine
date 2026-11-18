@@ -50,7 +50,12 @@ CREATE TABLE IF NOT EXISTS digests (
 );
 """
 
-PASSING = ("passed", "empty")
+# A unit that ran no test, such as a pytest file that only holds a standalone
+# driver, ends as EMPTY.  Its result counts as passing for the skip, since
+# while nothing it read has changed it would again find nothing to run, but
+# no report counts it as a pass: each says that it ran nothing.
+EMPTY = "empty"
+PASSING = ("passed", EMPTY)
 
 
 def default_path() -> Path:
@@ -72,8 +77,8 @@ class Result:
     note: str
 
     @property
-    def passed(self) -> bool:
-        return self.outcome in PASSING
+    def ran_nothing(self) -> bool:
+        return self.outcome == EMPTY
 
 
 @dataclass
@@ -313,3 +318,9 @@ class Store:
 
     def latest(self, unit: str) -> Result | None:
         return self._latest(unit, passing=False)
+
+    def latest_outcomes(self) -> dict[str, str]:
+        """Each recorded unit's latest outcome, read without its inputs."""
+        rows = self.db.execute(
+            "SELECT unit, outcome FROM results ORDER BY finished").fetchall()
+        return {unit: outcome for unit, outcome in rows}
