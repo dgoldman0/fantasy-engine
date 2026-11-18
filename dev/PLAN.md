@@ -834,15 +834,14 @@ Steps:
    builder, the cut in the loader's cost per line, the compiled token
    form of the modules, also as an option of the image builder, and the
    simulator's native replay and recording of token files. The default
-   boot stays the linked source build until the user volume attaches
-   (Decided, 2026-11-15, in place of the switch once planned for when
-   the simulator replayed and recorded natively). Built and booted on the
-   host, the system volume with token files still costs a test about 35
-   seconds where linked source costs 5, and a Desktop with a user volume
-   loads the ext4 driver at boot in either form, which changes that
-   comparison. Meanwhile the physical journey also runs in the shipping
-   form whenever loader, token, ext4 or volume code changes. To do: the
-   switch of the default.
+   boot stays the linked source build until the full Desktop journey
+   passes in the shipping form with the user volume, and becomes that
+   form then (Decided, 2026-11-18). Measured on the host on 2026-11-18,
+   the shipping form adds 7 to 9 seconds to each Desktop build, while
+   the boot to Desk's first frame takes about 7 seconds in either form
+   and the user volume adds about 1. Meanwhile the physical journey also
+   runs in the shipping form whenever loader, token, ext4 or volume code
+   changes. To do: the switch of the default.
    The record of this step is in MegaPad's
    `docs/module-loading-and-storage-units-2026-11-11.md`,
    `docs/performance/loader-line-cost-2026-11-11.md`,
