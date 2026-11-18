@@ -21,6 +21,15 @@ marks each unit to run whose last run ran nothing, and a full run counts a
 unit that now passes where it ran nothing, or now runs nothing where it
 passed, as a missed input.
 
+A unit can also pass no test because every test skipped, or because its
+module skipped itself while pytest collected it, as when an image, library
+or program it needs is missing; the unit ends as all-skipped.  What made
+its tests skip is seldom anything its record holds, so the skip never takes
+that result as a pass, and the unit runs again at each run until its tests
+run.  Every report names it apart from the passes, and a full run counts a
+unit whose tests now all skip, where the selection would have skipped it,
+as a missed input.
+
 Units run sequentially, each in a process of its own, with throwaway files
 in /dev/shm, which is RAM, and a pinned PYTHONHASHSEED.
 
@@ -57,8 +66,8 @@ from pathlib import Path
 from typing import TextIO
 
 from . import records
-from .recorder.fe_cases import PASSED_ENV, RESUME_ENV
-from .store import EMPTY, PASSING, Result, Store
+from .recorder.fe_cases import PASSED_ENV, RESUME_ENV, SKIPPED_ENV
+from .store import ALL_SKIPPED, EMPTY, PASSING, Result, Store
 from .suites import LAUNCH_VARIABLES, Locations, Repo, Unit
 
 RECORDER_DIR = Path(__file__).resolve().parent / "recorder"
@@ -76,8 +85,24 @@ _PASSED_PREFIXES = ("LC_", "MP64_", "MEGAPAD_", "MEGAFORTH_", "AKASHIC_", "LM1_"
 _UNKEYED = frozenset(("PATH", "TERM", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",
                       "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE",
                       "DBUS_SESSION_BUS_ADDRESS", "TMPDIR",
-                      "FE_TESTSEL_RECORD_DIR", PASSED_ENV, RESUME_ENV))
+                      "FE_TESTSEL_RECORD_DIR", PASSED_ENV, RESUME_ENV,
+                      SKIPPED_ENV))
 _KEYED_PROGRAMS = ("python3", "python", "make")
+
+
+def _listed(path: Path) -> bool:
+    try:
+        return bool(path.read_text(encoding="utf-8").split())
+    except OSError:
+        return False
+
+
+def passed_no_test(passed: Path, skipped: Path) -> bool:
+    """Whether a pytest unit that ended cleanly passed no test because its
+    tests, or its module, skipped: fe_cases lists each passed test in
+    PASSED and each skip in SKIPPED.  The passes of an interrupted attempt
+    stay on PASSED, so a resumed unit counts them."""
+    return not _listed(passed) and _listed(skipped)
 
 
 def _base_environment() -> dict[str, str]:
@@ -166,10 +191,12 @@ class Summary:
     ran: int = 0
     passed: int = 0
     empty: list[str] = field(default_factory=list)  # ran, and ran nothing
+    all_skipped: list[str] = field(default_factory=list)  # ran, and every test skipped
     failed: list[str] = field(default_factory=list)
     skipped: int = 0
     skipped_empty: int = 0  # skipped on a run in which they ran nothing
     last_empty: int = 0     # a dry run's units to run whose last run ran nothing
+    last_all_skipped: int = 0  # those whose tests all skipped at their last run
     skipped_seconds: float = 0.0
     ran_seconds: float = 0.0
     missed: list[str] = field(default_factory=list)
@@ -217,6 +244,10 @@ class Runner:
     def last_ran_nothing(self, unit: Unit) -> bool:
         last = self.store.latest(unit.id)
         return last is not None and last.ran_nothing
+
+    def last_all_skipped(self, unit: Unit) -> bool:
+        last = self.store.latest(unit.id)
+        return last is not None and last.all_skipped
 
     def run(self, units: list[Unit], *, full: bool = False, dry_run: bool = False) -> Summary:
         summary = Summary()
@@ -353,8 +384,10 @@ class Runner:
         tmp = self.scratch / "t"
         partial = self.partial(unit)
         record, passed = partial / "records", partial / "passed"
+        skipped = partial / "skipped"
         env = self.environment(launch, tmp, record)
         env[PASSED_ENV] = str(passed)
+        env[SKIPPED_ENV] = str(skipped)
         key = launch_key(launch.argv, launch.cwd, env, self.python, self.locations)
         if not dry_run:
             self.stop_orphan(partial)
@@ -374,9 +407,13 @@ class Runner:
         note = "; resumes after %d passed tests" % resumed if resumed else ""
         if dry_run:
             summary.ran += 1
-            if self.last_ran_nothing(unit):
+            last = self.store.latest(unit.id)
+            if last is not None and last.ran_nothing:
                 summary.last_empty += 1
                 note += "; it ran nothing at its last run"
+            elif last is not None and last.all_skipped:
+                summary.last_all_skipped += 1
+                note += "; all its tests skipped at its last run"
             self.say("RUN?  %s  %s%s" % (unit.id, decision.reason, note))
             return
 
@@ -419,6 +456,8 @@ class Runner:
         outcome = unit.repo.outcome(returncode)
         if resumed and outcome == EMPTY:
             outcome = "passed"  # its interrupted attempt passed every test
+        if outcome in PASSING and passed_no_test(passed, skipped):
+            outcome = ALL_SKIPPED
         note = "" if not moved else "inputs changed while it ran: %s" % moved[0]
         if moved and outcome in PASSING:
             outcome = "unsettled"
@@ -442,6 +481,16 @@ class Runner:
             # missed input as a failure: tests that appeared, or vanished,
             # while nothing the unit read changed.
             if full and decision.skip and outcome != decision.previous.outcome:
+                summary.missed.append(unit.id)
+                detail += ("; MISSED INPUT: the selection would have skipped it "
+                           "as %s" % self.unchanged(decision.previous))
+        elif outcome == ALL_SKIPPED:
+            summary.all_skipped.append(unit.id)
+            detail += "; all its tests skipped"
+            log_path.unlink(missing_ok=True)
+            # Its record predicted a pass: what made the tests skip is
+            # something the recording missed.
+            if full and decision.skip:
                 summary.missed.append(unit.id)
                 detail += ("; MISSED INPUT: the selection would have skipped it "
                            "as %s" % self.unchanged(decision.previous))
@@ -506,14 +555,22 @@ class Runner:
                      % summary.skipped_empty)
         if dry_run:
             would_run = "%d units" % summary.ran
+            marks = []
             if summary.last_empty:
-                would_run += (", %d of which ran nothing at their last run,"
-                              % summary.last_empty)
+                marks.append("%d of which ran nothing at their last run"
+                             % summary.last_empty)
+            if summary.last_all_skipped:
+                marks.append("%d of which skipped all their tests at their last run"
+                             % summary.last_all_skipped)
+            if marks:
+                would_run += ", %s," % ", ".join(marks)
             self.say("Would run %s and skip %d%s." % (would_run, summary.skipped, work))
             return
         counts = ["%d passed" % summary.passed]
         if summary.empty:
             counts.append("%d ran nothing" % len(summary.empty))
+        if summary.all_skipped:
+            counts.append("%d skipped all their tests" % len(summary.all_skipped))
         counts.append("%d failed" % len(summary.failed))
         if summary.unsettled:
             counts.append("%d unsettled" % len(summary.unsettled))
@@ -521,6 +578,8 @@ class Runner:
             summary.ran, summary.ran_seconds, ", ".join(counts), summary.skipped, work))
         for unit in summary.failed:
             self.say("  failed: %s" % unit)
+        for unit in summary.all_skipped:
+            self.say("  skipped all its tests: %s" % unit)
         for unit in summary.missed:
             self.say("  MISSED INPUT: %s gave a result its key did not predict" % unit)
 

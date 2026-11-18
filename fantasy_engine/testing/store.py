@@ -57,6 +57,14 @@ CREATE TABLE IF NOT EXISTS digests (
 EMPTY = "empty"
 PASSING = ("passed", EMPTY)
 
+# A unit that passed no test because every test skipped, or because its
+# module skipped itself while pytest collected it, ends as ALL_SKIPPED.  It
+# tested nothing, and what made its tests skip, such as a missing image,
+# library or program, is seldom anything its record holds, so its result
+# never counts as passing: the unit runs again at each run until its tests
+# run, and every report keeps it apart from the passes.
+ALL_SKIPPED = "all-skipped"
+
 
 def default_path() -> Path:
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(
@@ -79,6 +87,10 @@ class Result:
     @property
     def ran_nothing(self) -> bool:
         return self.outcome == EMPTY
+
+    @property
+    def all_skipped(self) -> bool:
+        return self.outcome == ALL_SKIPPED
 
 
 @dataclass

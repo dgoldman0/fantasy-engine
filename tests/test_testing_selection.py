@@ -337,6 +337,144 @@ def test_list_and_explain_mark_a_unit_whose_last_run_ran_nothing(
     assert explained[0].endswith("; it ran nothing at its last run")
 
 
+ALL_SKIPPED = """
+    import pytest
+
+    @pytest.mark.skip(reason="needs an image this checkout lacks")
+    def test_marked():
+        pass
+
+    def test_skips_itself():
+        pytest.skip("needs a program this machine lacks")
+"""
+
+MODULE_SKIPPED = """
+    import pytest
+
+    pytest.skip("needs a library this machine lacks", allow_module_level=True)
+
+    def test_never_collected():
+        pass
+"""
+
+ONE_SKIPPED = """
+    import pytest
+
+    def test_runs():
+        pass
+
+    @pytest.mark.skip(reason="not on this machine")
+    def test_skips():
+        pass
+"""
+
+
+def test_a_unit_whose_tests_all_skip_is_reported_apart_and_runs_again(
+        demo, store, tmp_path):
+    commit_file(demo.root, "tests/test_k.py", ALL_SKIPPED, "all skip")
+    commit_file(demo.root, "tests/test_m.py", MODULE_SKIPPED, "module skips")
+    commit_file(demo.root, "tests/test_n.py", ONE_SKIPPED, "one skips")
+    names = ("tests/test_k.py", "tests/test_m.py", "tests/test_n.py")
+    units = [u for u in demo.units() if u.name in names]
+    summary, ran, text = run(demo, store, tmp_path, units=units)
+    assert ran == list(names)
+    assert summary.passed == 1 and not summary.empty and not summary.failed
+    assert sorted(summary.all_skipped) == ["demo:tests/test_k.py", "demo:tests/test_m.py"]
+    for unit_id in summary.all_skipped:
+        line = unit_line(text, unit_id)
+        assert "no passing run on record -> all-skipped in" in line
+        assert line.endswith("; all its tests skipped")
+        assert "  skipped all its tests: %s" % unit_id in text
+    assert ": 1 passed, 2 skipped all their tests, 0 failed." in text
+    assert store.latest("demo:tests/test_k.py").all_skipped
+    assert store.latest_pass("demo:tests/test_k.py") is None
+
+    # Unchanged, both run again, since nothing on record says why their
+    # tests skipped; the unit that passed a test is skipped.
+    summary, ran, text = run(demo, store, tmp_path, units=units, dry_run=True)
+    assert ran == ["tests/test_k.py", "tests/test_m.py"]
+    assert summary.last_all_skipped == 2 and summary.skipped == 1
+    assert unit_line(text, "demo:tests/test_m.py").endswith(
+        "no passing run on record; all its tests skipped at its last run")
+    assert ("Would run 2 units, 2 of which skipped all their tests at their last "
+            "run, and skip 1 ") in text
+    summary, ran, _ = run(demo, store, tmp_path, units=units)
+    assert ran == ["tests/test_k.py", "tests/test_m.py"]
+    assert len(summary.all_skipped) == 2 and summary.skipped == 1
+
+
+SKIPPED_WITHOUT_IMAGE = """
+    import os
+    import pytest
+
+    # os.path.exists raises no audit event, so this read goes unrecorded.
+    @pytest.mark.skipif(not os.path.exists("data/image"), reason="no image")
+    def test_reads_the_image():
+        pass
+"""
+
+
+def test_a_full_run_finds_a_unit_whose_tests_now_all_skip(demo, store, tmp_path):
+    commit_file(demo.root, "tests/test_i.py", SKIPPED_WITHOUT_IMAGE, "image")
+    unit = [u for u in demo.units() if u.name == "tests/test_i.py"]
+    (demo.root / "data" / "image").write_text("")
+    summary, _, _ = run(demo, store, tmp_path, units=unit)
+    assert summary.passed == 1
+    (demo.root / "data" / "image").unlink()
+    _, ran, _ = run(demo, store, tmp_path, units=unit)
+    assert ran == []  # wrongly skipped
+    summary, ran, text = run(demo, store, tmp_path, units=unit, full=True)
+    assert summary.all_skipped == ["demo:tests/test_i.py"]
+    assert summary.missed == ["demo:tests/test_i.py"]
+    assert "MISSED INPUT: the selection would have skipped it as unchanged since" in text
+
+
+def test_list_and_explain_mark_a_unit_whose_tests_all_skipped(
+        tmp_path, store, capsys):
+    from fantasy_engine.testing.__main__ import main
+    from fantasy_engine.testing.suites import repositories
+
+    workspace = tmp_path / "ws"
+    root = workspace / "akashic"
+    (root / "local_testing").mkdir(parents=True)
+    (root / "local_testing" / "test_p.py").write_text("def test_p():\n    pass\n")
+    (root / "local_testing" / "test_k.py").write_text(textwrap.dedent(ALL_SKIPPED))
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "akashic"], check=True)
+    [repo] = repositories(workspace)
+    Runner(store, repos=[repo], out=io.StringIO(), scratch=tmp_path / "scratch",
+           partial_root=tmp_path / "partial").run(repo.units())
+    common = ["--workspace", str(workspace), "--store", str(store.path)]
+
+    main(["list", "--recorded", *common])
+    listed = capsys.readouterr().out.splitlines()
+    assert listed == [
+        "akashic:local_testing/test_k.py  (all its tests skipped at its last run)",
+        "akashic:local_testing/test_p.py"]
+
+    main(["explain", *common])
+    explained = capsys.readouterr().out.splitlines()
+    assert explained[0] == ("akashic:local_testing/test_k.py: no passing run on "
+                            "record; all its tests skipped at its last run")
+    assert explained[1].startswith("akashic:local_testing/test_p.py: unchanged since ")
+    assert "skipped" not in explained[1]
+
+
+def test_a_resumed_unit_counts_the_passes_of_its_interrupted_attempt(tmp_path):
+    from fantasy_engine.testing.runner import passed_no_test
+
+    passed, skipped = tmp_path / "passed", tmp_path / "skipped"
+    # Neither list: only expected failures ran, and they ran.
+    assert not passed_no_test(passed, skipped)
+    skipped.write_text("tests/test_r.py::test_three\n")
+    assert passed_no_test(passed, skipped)
+    # The interrupted attempt passed a test before the rest skipped.
+    passed.write_text("tests/test_r.py::test_one\n")
+    assert not passed_no_test(passed, skipped)
+
+
 def test_recorded_adds_the_units_the_patterns_name(tmp_path, store, capsys):
     from fantasy_engine.testing.__main__ import main
     from fantasy_engine.testing.suites import repositories

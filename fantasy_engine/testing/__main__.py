@@ -22,6 +22,13 @@ driver does under pytest.  Every command says so: ``run`` counts those units
 apart from the passes and says when the run a skipped unit relies on ran
 nothing, and a dry run, ``list`` and ``explain`` mark each unit whose last
 run ran nothing.
+
+A unit can also pass no test because every test skipped, or because its
+module skipped itself, as when an image, library or program it needs is
+missing.  It tested nothing, and its record seldom holds what made the tests
+skip, so it never counts as a pass and runs again at each run.  ``run``
+counts and names those units apart, and a dry run, ``list`` and ``explain``
+mark each unit whose tests all skipped at its last run.
 """
 
 from __future__ import annotations
@@ -32,7 +39,7 @@ import sys
 from pathlib import Path
 
 from .runner import Lock, Runner, decide, launch_key
-from .store import EMPTY, Store
+from .store import ALL_SKIPPED, EMPTY, Store
 from .suites import FINAL_ONLY, OUTSIDE_RELEASE, Unit, repositories
 
 _SETS = {
@@ -117,9 +124,10 @@ def main(argv: list[str] | None = None) -> int:
         repos, units = _select(args, store)
         if args.command == "list":
             outcomes = store.latest_outcomes()
+            marks = {EMPTY: "  (ran nothing at its last run)",
+                     ALL_SKIPPED: "  (all its tests skipped at its last run)"}
             for unit in units:
-                print(unit.id + ("  (ran nothing at its last run)"
-                                 if outcomes.get(unit.id) == EMPTY else ""))
+                print(unit.id + marks.get(outcomes.get(unit.id), ""))
             return 0
         if args.command == "explain":
             runner = Runner(store, repos=repos)
@@ -136,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
                     why = decision.reason
                     if runner.last_ran_nothing(unit):
                         why += "; it ran nothing at its last run"
+                    elif runner.last_all_skipped(unit):
+                        why += "; all its tests skipped at its last run"
                 print("%s: %s" % (unit.id, why))
                 if decision.previous is not None and not decision.skip:
                     for change in store.changes(decision.previous.inputs, limit=None,
