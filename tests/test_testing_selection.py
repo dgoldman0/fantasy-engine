@@ -337,6 +337,42 @@ def test_list_and_explain_mark_a_unit_whose_last_run_ran_nothing(
     assert explained[0].endswith("; it ran nothing at its last run")
 
 
+def test_recorded_adds_the_units_the_patterns_name(tmp_path, store, capsys):
+    from fantasy_engine.testing.__main__ import main
+    from fantasy_engine.testing.suites import repositories
+
+    workspace = tmp_path / "ws"
+    root = workspace / "akashic"
+    (root / "local_testing").mkdir(parents=True)
+    for name in ("test_a", "test_b", "test_new"):
+        (root / "local_testing" / f"{name}.py").write_text(
+            f"def {name}():\n    pass\n")
+    git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "akashic"], check=True)
+    [repo] = repositories(workspace)
+    # The record holds test_a and test_b; test_new has never run.
+    Runner(store, repos=[repo], out=io.StringIO(), scratch=tmp_path / "scratch",
+           partial_root=tmp_path / "partial").run(
+        [unit for unit in repo.units() if "test_new" not in unit.id])
+    common = ["--workspace", str(workspace), "--store", str(store.path)]
+    a, b, new = ("akashic:local_testing/%s.py" % name
+                 for name in ("test_a", "test_b", "test_new"))
+
+    main(["list", "--recorded", *common])
+    assert capsys.readouterr().out.splitlines() == [a, b]
+    # Patterns given with --recorded add the units they name to the recorded
+    # ones, so a test the record has not seen runs in the same command.
+    main(["list", "--recorded", "test_new", *common])
+    assert capsys.readouterr().out.splitlines() == [a, b, new]
+    main(["list", "--recorded", "test_a", *common])
+    assert capsys.readouterr().out.splitlines() == [a, b]
+    # Patterns alone name only their units.
+    main(["list", "test_new", *common])
+    assert capsys.readouterr().out.splitlines() == [new]
+
+
 RESUMABLE = """
     import os
 

@@ -11,8 +11,11 @@ or ``lm1:phase1_io``, with shell wildcards; without a wildcard it matches any
 unit whose name contains it.  ``--set`` picks the units that run with each
 change (``release``, the default), those plus the units that wait for the
 release's final run (``final``), the units for what the release leaves out
-(``outside``), or every unit (``all``).  ``--recorded`` keeps only units the
-record already holds, which the selection can judge without running them.
+(``outside``), or every unit (``all``).  ``--recorded`` selects every unit
+the record already holds, which the selection can judge without running
+them, and patterns given with it add the units they name beside those, so
+one command runs what changed among the recorded units and a test the
+record has not seen yet.  ``--repo`` limits either to its repositories.
 
 A unit can run and test nothing, as a test file that holds only a standalone
 driver does under pytest.  Every command says so: ``run`` counts those units
@@ -67,10 +70,15 @@ def _select(args, store: Store | None = None) -> tuple[list, list[Unit]]:
             raise SystemExit("No repository named %s" % ", ".join(sorted(unknown)))
         every = [unit for unit in every if unit.repo.name in args.repo]
     wanted = _SETS[args.set]
-    units = [unit for unit in every
-             if unit.set in wanted and _matches(unit, args.patterns)]
+    units = [unit for unit in every if unit.set in wanted]
     if getattr(args, "recorded", False) and store is not None:
-        units = [unit for unit in units if store.latest(unit.id) is not None]
+        # The recorded units, and beside them any the patterns name, so a
+        # new test runs in the same command as the units it sits among.
+        units = [unit for unit in units
+                 if store.latest(unit.id) is not None
+                 or (args.patterns and _matches(unit, args.patterns))]
+    else:
+        units = [unit for unit in units if _matches(unit, args.patterns)]
     return repos, units
 
 
@@ -80,7 +88,8 @@ def _common(parser: argparse.ArgumentParser) -> None:
                         help="limit to a repository (repeatable)")
     parser.add_argument("--set", choices=tuple(_SETS), default="release")
     parser.add_argument("--recorded", action="store_true",
-                        help="only units the record already holds")
+                        help="every unit the record holds, and beside them "
+                             "any the patterns name")
     parser.add_argument("--workspace", help="the folder holding the repositories")
     parser.add_argument("--store", help="the record file (default under ~/.cache)")
 
