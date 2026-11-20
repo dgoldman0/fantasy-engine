@@ -6,8 +6,8 @@ ordinary lists, and when work on it starts. The language names what code
 needs, never a chip, and the toolchain decides where each task runs. The
 release waits for the part of it that score-guided search needs (decision
 32), and D12 decides whether Study's concept map is written in it. The
-language is named Uroko. This file holds the thinking that is still open.
-Nothing else here is decided.
+language is named Uroko. This file holds the thinking that is still open;
+the items marked decided are settled.
 
 ## A sketch
 
@@ -102,11 +102,16 @@ whole (decision 30). They are worth reading before the design goes further.
 - **Name.** Uroko, the Japanese word for a scale, chosen on 2026-11-20 for
   Leviathan's scales. It is Uroko Forth instead if the checker and compiler
   show it to be a dialect of Forth rather than a language of its own.
-- **How kinds are written.** Akashic's stack comments already use informal
-  names such as `addr`, `u`, `n`, `flag` and `xt`, and the sketch names
-  objects after their records, such as `concept`. The checker for
-  hand-written Forth also needs `ref` and `handle`, the kinds 9d's rules are
-  about.
+- **How kinds are written** (decided 2026-11-20). A kind follows its item's
+  name after a colon, inside the usual stack comment, as Factor writes
+  stack effects: `( buf: span  c: concept -- n: u )`. A slot that holds an
+  execution token states the token's effect as a nested comment,
+  `( holds: xt( text: span -- ) )`, and a record's fields take kinds the
+  same way. An item without a kind is a plain cell. The checker's first
+  round found that names such as `addr` or `u` cannot carry kinds reliably,
+  and Akashic already uses `ref` and `handle` for things other than 9d's
+  managed references, so no kind is guessed from a name. The source stays
+  plain Forth, which KDOS reads with the declarations as comments.
 - **Spans are two cells.** A span is Forth's address and length, so a plain
   `SWAP` can split one. The checker has to know which shuffles keep a span
   whole.

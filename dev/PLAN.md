@@ -209,8 +209,11 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     stack shuffles and the return stack and needs nothing from LM1, so it is
     built first and tried on existing Akashic code, because tracking refs
     through shuffles and quotations is the part most likely to prove
-    awkward; syntax waits for it. The compiler runs in the image builder on
-    the host and emits each engine's own system language: Forth source,
+    awkward; syntax waits for it. Kinds are declared inside the stack
+    comment, each after its item's name and a colon, so the source stays
+    plain Forth, and an item with no kind is a plain cell (decided
+    2026-11-20). The compiler runs in the image builder on the host and
+    emits each engine's own system language: Forth source,
     which KDOS loads like any other, for a word placed on MegaPad, and Lisp,
     which LM1's runtime compiles, for a word placed on LM1. A word stays on
     MegaPad unless the checker works out its stack effect from the code all
