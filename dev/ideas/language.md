@@ -132,13 +132,16 @@ Fields of object kinds, `tagged`, `flag` and `char` become the record's
 tagged fields. Fields of plain kinds, such as `cell`, `n`, `u` or `addr`,
 become raw words, a `span` taking two. A raw word holds all 64 bits, and
 the collector never reads it as a reference, so a cell that wraps is stored
-whole. The declaration registers the kind's
-shape with the collector when its module loads, and defines a constructor
-such as `make-concept ( name: string links: list( concept ) seen: u -- c:
-concept )`, a reader and a writer for each field, such as `concept.name (
-c: concept -- s: string )` and `concept.name! ( s: string c: concept -- )`,
-and a check that turns a reference of no known kind into a concept, failing
-otherwise. The spelling of all of these waits for the checker.
+whole.
+
+The declaration registers the kind's shape with the collector when its
+module loads. It defines a constructor, such as
+`make-concept ( name: string links: list( concept ) seen: u -- c: concept )`;
+a reader and a writer for each field, such as
+`concept.name ( c: concept -- s: string )` and
+`concept.name! ( s: string c: concept -- )`; and a check that turns a
+reference of no known kind into a concept, failing otherwise. The spelling
+of all of these waits on the compiler and on these rules.
 
 ### What the compiler inserts
 
@@ -264,7 +267,8 @@ A task keeps four rules on either engine, which LM1's `spec/06-runtime.md`
 
 1. its inputs are lent: the code that starts it names them by handles, and
    neither re-points nor releases those handles until the task ends;
-2. its inputs are read-only to it, on LM1 by capability mode;
+2. its inputs are read-only to it, on LM1 by capability mode, and on
+   MegaPad, which has no capability mode, by the checker;
 3. its objects stay its own: a store that would put one into an object it
    did not make is refused, so nothing escapes but its result;
 4. its result is copied out into a handle that the starting code lent it.
