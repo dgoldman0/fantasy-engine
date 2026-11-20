@@ -35,7 +35,8 @@ made.
   simulator and emulator, BIOS, KDOS and system modules. Akashic supplies the
   libraries, Desk, the applets and Practices. LM1 is a Lisp chiplet that
   works beside MegaPad as a partner device, and the two share memory.
-  MegaPad handles control, I/O and number crunching. LM1 runs the sandbox's
+  MegaPad handles control, I/O and number crunching, LM1's included
+  (decision 38). LM1 runs the sandbox's
   jobs and manages the data Desk wants collected, with type checks, allocation
   and garbage collection in hardware, and its own software is written in
   Lisp. The combined chip is Leviathan, and the system people run is Fantasy
@@ -133,8 +134,10 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     where typed values are tagged words, allocation and collection happen in
     hardware, and capability mode keeps jobs apart (Part 9c). Desk's
     growing, linked data follows as managed data (decision 28, Part 9d). The
-    Lisp console is a learning tool in the Workshop (Part 7), and LM1's side
-    of this work is written in Lisp.
+    Lisp console is a learning tool in the Workshop (Part 7). LM1's own
+    software for this work, its runtime and the engines that run on its
+    hardware, is written in Lisp, as KDOS is written in Forth, and programs
+    that span both chips are written in the language (decision 32).
 28. LM1's collector manages only data in LM1's tagged format. Forth's memory
     doesn't mark which numbers are pointers, so no collector can manage it,
     wherever LM1 sits, and Forth's own buffers stay under manual control. A
@@ -198,29 +201,43 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     that uses no plain memory and holds authority only as capabilities could
     compile to the sandbox's artifact format, while the sandbox's own source
     language stays as its documentation ratifies it.
-32. Work on the language starts with the checker when release work begins,
-    and the language grows alongside Parts 2, 3 and 8 without being one of
-    the leading items (decision 10). Its first version is small. The
-    checker's core tracks kinds through stack shuffles and the return stack
-    and needs nothing from LM1, so it is built first and tried on existing
-    Akashic code, because tracking refs through shuffles and quotations is
-    the part most likely to prove awkward; syntax waits for it. The compiler
-    emits Forth source, which KDOS loads like any other, and it runs in the
-    image builder on the host. The toolchain places everything on MegaPad,
-    with LM1 only collecting through 9d's library, so an LM1 backend, tasks
-    on LM1, and running lists built while a program runs come after the
-    release.
+32. Work on the language starts with the checker when release work begins.
+    Its first version is small. The checker's core tracks kinds through
+    stack shuffles and the return stack and needs nothing from LM1, so it is
+    built first and tried on existing Akashic code, because tracking refs
+    through shuffles and quotations is the part most likely to prove
+    awkward; syntax waits for it. The compiler runs in the image builder on
+    the host and emits each engine's own system language: Forth source,
+    which KDOS loads like any other, for a word placed on MegaPad, and Lisp,
+    which LM1's runtime compiles, for a word placed on LM1. A word whose
+    stack effect the checker cannot fix stays on MegaPad.
+
+    The first release takes the language as far as score-guided search needs
+    it (decision 38, Part 9f), and that library is written in the language
+    so that its needs build the language out (decided 2026-11-20). The
+    release therefore carries placement from a machine description of two
+    engines or one, with tasks as the only crossings between them; tasks on
+    LM1 and from LM1 to MegaPad, each result carrying a status; the LM1
+    backend and the Lisp it needs from LM1's compiler; kinds for tile arrays,
+    compiled to the tile words; and words as values that carry each engine's
+    compiled entry. On a machine with one engine, a task's objects live in a
+    heap that lasts as long as the task, its result is copied out at the
+    end, and a check confirms that nothing else escapes, so the same program
+    runs on one engine and on two and the results can be compared. The
+    release waits for this much of the language: by estimate 80 to 130 agent
+    hours for the first version and 100 to 170 more for these additions.
+    Running lists that a program builds as it runs comes after the release.
 
     The object side follows once 9d's window and handle rules are specified,
     since the compiler inserts them, and those rules depend on the link
     specification in Part 8. Until then, 9d's rules are written precisely
-    enough for a checker to enforce them. The release never waits for the
-    language. Whether Study's concept map, the release's first managed-data
-    component, is written in it is decided when those rules are specified
-    (D12). The subset the release uses is frozen, so later changes to the
-    language don't force changes to release code. The language stays small,
-    Forth plus kinds, objects, capabilities and tasks, so that it doesn't
-    split the library across a third language.
+    enough for a checker to enforce them. Whether Study's concept map, the
+    release's first managed-data component, is written in the language is
+    decided when those rules are specified (D12). The subset the release
+    uses is frozen, so later changes to the language don't force changes to
+    release code. The language stays small, Forth plus kinds, objects,
+    capabilities and tasks, so that it doesn't split the library across a
+    third language.
 33. All of this repository's development material lives in `dev/`: this
     plan, ideas still being worked out, and notes for later releases. An
     idea is worked out in `dev/ideas/` until it is decided, then moves into
@@ -310,7 +327,18 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     MegaPad core stalls on a slow read while LM1 switches hardware threads
     during one. A chiplet lending its own memory to MegaPad waits for a use
     that needs it. MegaPad's `docs/chiplet-interconnect-plan.md` holds the
-    design, with LM1's layer for sandbox jobs and managed data.
+    design, with LM1's layer for sandbox jobs, managed data and borrowed
+    tile work (decision 38).
+38. LM1 does its number work on MegaPad's tile engines and carries no
+    numeric units of its own, so its spec drops the SIMD/tensor sidekick
+    tiles, about 40 of its 500 mm² (decided 2026-11-20). LM1 asks MegaPad for
+    tile work by its class over decision 37's queues, a MegaPad core other
+    than Desk's runs the work, and the results go straight into memory LM1
+    lends, through the tile engine's direct path. On a machine with one
+    engine, the same scoring runs on MegaPad as an ordinary call. The first
+    use is score-guided search (Part 9f). MegaPad's
+    `docs/chiplet-interconnect-plan.md` §7 holds the design, and LM1's
+    `spec/04-soc.md` §8 and `spec/05-memory-gc.md` §11 hold LM1's side.
 
 ## 3. Open decisions
 
@@ -339,24 +367,31 @@ shared data still crosses the link, since shared data is stored in
 MegaPad's memory. MegaPad's memory, reached over the link, is cheaper and
 simpler, but LM1's whole heap and collector then share MegaPad's external
 memory with Desk. Recommended: a short sizing study as the first step of
-Part 8b. It measures the work Leviathan gives LM1, which is sandbox jobs
-and Desk's managed data (decisions 27 and 28), including how often each
-chip touches that data and how much traffic the collector adds. It also
-sets an area budget relative to MegaPad and compares the bandwidth of each
-memory option. The study comes back with numbers before anything is
-chosen. Blocks Part 8b.
+Part 8b. It measures the work Leviathan gives LM1, which is sandbox jobs,
+Desk's managed data and borrowed tile work (decisions 27, 28 and 38),
+including how often each chip touches that data, how much traffic the
+collector adds, and the feature bytes each scored candidate sends through
+MegaPad's external memory (by estimate about 1,000 controller transactions
+for 64 candidates with 64-byte rows). It says whether letting the tile
+engines read their operands from LM1's memory, which is not built, would
+repay the work by taking that traffic off Desk's memory. It also sets an
+area budget relative to MegaPad, to which the 40 mm² freed by dropping the
+sidekick tiles returns, and compares the bandwidth of each memory option.
+The study comes back with numbers before anything is chosen. Blocks
+Part 8b.
 
 **D12. Whether Study's concept map is written in the language.** The concept
-map is the release's first managed-data component (Part 9d), and the
-language's first version is built alongside Parts 2, 3 and 8 (decision 32).
-The choice is made when 9d's window and handle rules are specified. If the
-language can then compile the concept map, with the compiler inserting the
-windows and handles, the map is written in it: the map is written once, and
-the compiler rather than hand-written Forth keeps 9d's rules. If not, the
-map is written in Forth under 9d's rules. The release doesn't wait for the
-language either way. Recommended: decide on evidence, namely the checker
-working on existing Akashic code and the compiler handling a draft of the
-concept map's code. Blocks the concept map's implementation in Part 9d.
+map is the release's first managed-data component (Part 9d) and the first
+user of score-guided search (Part 9f), whose library is written in the
+language. Since the release now builds the language's LM1 backend and tasks
+on LM1 (decision 32), the map's data and its search can be written in the
+language and run on LM1, where they need no windows or handles; only code on
+MegaPad does. The open part is the map's view on MegaPad, where the compiler
+must insert 9d's windows and handles. The choice is made when 9d's window
+and handle rules are specified. Recommended: write the map in the language,
+and decide its view on the evidence of the compiler handling a draft of the
+view's code; if it cannot yet, the view alone is written in Forth under 9d's
+rules. Blocks the concept map's implementation in Part 9d.
 
 ## 4. Where things stand
 
@@ -910,6 +945,10 @@ microcore stacks.
   microcore widens to 32 registers and decodes the REX prefix's extension
   bits as the full core does, and boot gives microcores their stacks. A test
   runs R16 to R31 on a microcore in both the RTL and the emulator.
+- **3f. The tile engine's accumulator** (Decided 2026-11-20). The simulator
+  implements the full-width TACC family, which it marks unsupported today,
+  with the emulator's results, and `TACC.STORE`'s route into a chiplet's
+  window, since borrowed tile work (decision 38) runs on it.
 
 Done when:
 
@@ -998,20 +1037,24 @@ Lisp where the work calls for it.
 The set (decision 26). The names are working names, and the set can change.
 
 - **Everyday.** Daily computing, the internet included: writing, documents
-  and PDFs, files, plans and reminders, tables, Bluesky and news feeds, and
-  an Agent with a real AI provider. It binds the user's documents, calendar
-  and feeds. The Agent may read, draft and set reminders; anything it would
-  post or send waits for the user's approval.
+  and PDFs, files, plans and reminders, with a planner that fits open tasks
+  into the day through score-guided search (Part 9f), tables, Bluesky and
+  news feeds, and an Agent with a real AI provider. It binds the user's
+  documents, calendar and feeds. The Agent may read, draft and set
+  reminders; anything it would post or send waits for the user's approval.
 - **Workshop** (the System Practice, Part 7). Learning the machine by
   building with it, in Forth on MegaPad and Lisp on LM1 side by side. It
   holds the shipped library sources read-only, a writable workspace, a
   console for each language, the reference docs, and the sandbox for trying
-  modules safely. The Agent explains code and helps write modules.
+  modules safely. Among its examples, a sliding-tile puzzle solver shows
+  both engines at work in one program (Part 9f). The Agent explains code and
+  helps write modules.
 - **Study.** A Practice around one subject: a corpus of documents and PDFs,
   feeds that follow the subject, notes and tables, and a growing map of the
-  subject's concepts. The map is new work, kept on LM1 as managed data. The
-  Agent summarizes with citations to the bound sources. It ships with one
-  sample subject, whose material must be freely licensed.
+  subject's concepts. The map is new work, kept on LM1 as managed data, and
+  it suggests links between concepts through score-guided search (Part 9f).
+  The Agent summarizes with citations to the bound sources. It ships with
+  one sample subject, whose material must be freely licensed.
 - **Publishing.** Writing for the web: drafts in Pad, a small website served
   by the machine's own web server, a feed of the posts, and posting to
   Bluesky. The feed writer is new work, since Akashic's feed code only reads
@@ -1081,6 +1124,9 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
     production size, and resource limits follow need.
   - Replace PCIe, NVMe, 100 GbE and the display engine with the MegaPad
     link, since MegaPad handles I/O and Desk handles the display.
+  - Carry no numeric units: LM1's number work runs on MegaPad's tile
+    engines (decision 38). Done 2026-11-20: the spec drops the SIMD/tensor
+    sidekick tiles.
   - Decide where its memory lives: the chiplet's own HBM, or MegaPad's
     memory (D8).
   - Have MegaPad load and start the Lisp runtime over the link.
@@ -1129,7 +1175,10 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
   its mailbox reaches the small cores as well as the full ones, and LM1 has
   a link endpoint and a boot fetch that pass a bench joined to MegaPad's
-  RTL. To do: wire them into LM1's cluster.
+  RTL. Its cluster has a write port through which the boot fetch loads the
+  image and MegaPad's tile engines store results into memory LM1 lends
+  (decision 38), and a bench joins the endpoint, the fetch and a two-tile
+  cluster to MegaPad's RTL. To do: wire them into LM1's top level.
 - **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
   build the Lisp runtime image that MegaPad loads.
 - **8g. Verification.** Link conformance tests, including handles that
@@ -1143,11 +1192,14 @@ same link tests.
 
 ### Part 9. LM1 in the system software
 
-Needs Part 5 and Parts 3d, 8c and 8d.
+Needs Part 5 and Parts 3d, 8c and 8d; 9f also needs Parts 3a and 3f and the
+language as decision 32 has it.
 
 LM1 first shows what it does for Desk (decision 27): the sandbox's jobs run
-on it, and its collector manages the data Desk wants collected. Lisp is how
-LM1's side is written, and the Lisp console is a learning tool.
+on it, its collector manages the data Desk wants collected, and its searches
+have MegaPad's tile engines score their candidates (decision 38). LM1's own
+software is written in Lisp, programs that span both chips are written in
+the language (decision 32), and the Lisp console is a learning tool.
 
 - **9a.** MegaPad gets a system module for the chiplet, following
   `networking.f` and `rich-terminal.f`. MegaPad owns it, and system
@@ -1197,6 +1249,18 @@ LM1's side is written, and the Lisp console is a learning tool.
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds
   programs, and examples come with it.
+- **9f. Score-guided search** (Decided 2026-11-20). Akashic gets a library,
+  written in the language, through which a program explores a tree of
+  options while a scorer rates each candidate: ranking, beam search and
+  batched best-first search, with a linear scorer, a two-layer 8-bit network
+  and vector similarity, and room for a program's own kernels. On Leviathan
+  the search runs on LM1 and its scorers on MegaPad's tile engines
+  (decision 38); on one engine all of it runs on MegaPad with the same
+  result. Scorers start from hand-set weights over named features and learn
+  on the machine from the user's own choices. Its first users are Study's
+  link suggestions and Daybook's day planner, and a sliding-tile puzzle
+  solver among the Workshop's examples tests it end to end. Akashic's
+  `docs/search/scored-search.md` holds the design.
 
 Done when, through Desk's normal path:
 
@@ -1205,7 +1269,10 @@ Done when, through Desk's normal path:
 - managed data keeps the objects Forth holds through collections, and
   closing an applet releases every handle it held;
 - in the Workshop, a journey evaluates Lisp expressions and runs a program
-  written in Pad on LM1.
+  written in Pad on LM1;
+- an applet's search runs on LM1 with its candidates scored on MegaPad's
+  tile engines, and the same program placed entirely on MegaPad returns the
+  same result.
 
 ### Part 10. Documentation
 
@@ -1286,16 +1353,21 @@ or before a chip is made, a lawyer reviews the licensing.
   in `lm1/`, with the link's spec (8c) in MegaPad.
 - Parts 4 and 5 can proceed alongside them. Part 4's image builder moves
   onto ext4 once Part 2 lands.
-- The language (decision 32) starts with the checker when release work
-  begins and proceeds alongside the three leading parts, without being one
-  of them. Whether Study's concept map uses it is decided when 9d's rules
-  are specified (D12).
+- The language (decision 32) starts with the checker, begun on 2026-11-20,
+  and proceeds alongside the three leading parts. The release waits for the
+  part of it that score-guided search needs (9f), and its LM1 backend
+  follows LM1's runtime and compiler (Parts 8d and 8f). Whether Study's
+  concept map is written in it is decided when 9d's rules are specified
+  (D12).
 - Part 6 needs Parts 4 and 5. Part 7 needs Parts 1d, 2 and 5. Part 9 needs
-  Part 5 and Parts 3d, 8c and 8d.
+  Part 5 and Parts 3d, 8c and 8d, and 9f also needs Parts 3a and 3f and the
+  language.
 - Within Part 9, the sandbox (9c) comes first, since it needs only jobs
   handed over and results handed back. Managed data (9d) follows once the
   link's handle and window rules are specified, and Study's concept map
-  waits for it.
+  waits for it. Score-guided search (9f) follows the link software of 9a
+  and 9c and the language's LM1 backend, and Study's link suggestions follow
+  the concept map.
 - Part 10 grows with every part and is finished before Part 11.
 - Each part starts on approval.
 
