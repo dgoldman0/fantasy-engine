@@ -14,18 +14,25 @@ side of them.
 
 ## A sketch
 
-Every spelling here is a guess, since the syntax waits for the checker
-(decision 32), except the declarations of kinds, which follow the decided
-form. The program is a piece of Study's concept map, which Part 9d names as
-the first user of managed data.
+The program is a piece of Study's concept map, which Part 9d names as the
+first user of managed data. How kinds are written is settled, by the
+checker's first two rounds and the decisions of 2026-11-20. A kind follows
+its item's name after a colon, inside the stack comment. A slot that holds
+execution tokens states their effect as `xt( ... )`. A named effect is
+declared once, as `( kind: nio-io xt( ... ) )`, and used as
+`( holds: nio-io )`. `port|0: nio-port` names a cell that holds a port or
+zero, and `s': span` names part of an input span. Every other spelling here
+is a guess: objects and records, tasks, windows and handles, kinds for tile
+arrays, and kernels wait on the compiler and on Part 9d's rules, which the
+section on objects below proposes.
 
 ```forth
-RECORD concept  ( name: string  links: list( concept ) )
+RECORD concept  ( name: string  links: list )
 
 : link  ( a: concept  b: concept -- )        \ a now links to b
     OVER concept.links CONS  SWAP concept.links! ;
 
-: nearby  ( c: concept -- l: list( concept ) )   \ one or two links away
+: nearby  ( c: concept -- l: list )          \ one or two links away
     DUP concept.links
     DUP [ concept.links ] MAP CONCAT
     APPEND UNIQUE  SWAP REMOVE ;
