@@ -217,7 +217,11 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     which KDOS loads like any other, for a word placed on MegaPad, and Lisp,
     which LM1's runtime compiles, for a word placed on LM1. A word stays on
     MegaPad unless the checker works out its stack effect from the code all
-    the way down, trusting no stack comment (decided 2026-11-20).
+    the way down, trusting no stack comment (decided 2026-11-20). A word
+    that runs execution tokens kept in a slot qualifies once its module is
+    compiled as Uroko, where the slot holds words as values and every store
+    into it is compiled by Uroko or checked by a setter word; existing Forth
+    reaches LM1 module by module that way (decided 2026-11-20).
 
     The first release takes the language as far as score-guided search needs
     it (decision 38, Part 9f), and that library is written in the language
