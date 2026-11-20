@@ -155,9 +155,12 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     A hand-off would cost about the same on one die, and moving LM1 onto
     MegaPad's die wouldn't change the collector's limit either
     (decision 28), so LM1 stays a chiplet.
-30. Leviathan gets a language of its own. Its meaning covers both plain data
-    and collected objects, so it uses both of Leviathan's engines natively
-    without naming either (decision 31). Existing languages each assume one
+30. Leviathan gets a language of its own, named Uroko, the Japanese word for
+    a scale (named 2026-11-20). Whether it is called Uroko or Uroko Forth is
+    settled once the checker and compiler show how far it departs from
+    Forth. Its meaning covers both plain data and collected objects, so it
+    uses both of Leviathan's engines natively without naming either
+    (decision 31). Existing languages each assume one
     kind of memory. Lisp, Factor, Joy, Erlang and Pony let a collector own
     every value, stacks included, while Forth has no managed values at all.
     The nearest exceptions each miss part of it: PreScheme compiles its
@@ -209,8 +212,9 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     awkward; syntax waits for it. The compiler runs in the image builder on
     the host and emits each engine's own system language: Forth source,
     which KDOS loads like any other, for a word placed on MegaPad, and Lisp,
-    which LM1's runtime compiles, for a word placed on LM1. A word whose
-    stack effect the checker cannot fix stays on MegaPad.
+    which LM1's runtime compiles, for a word placed on LM1. A word stays on
+    MegaPad unless the checker works out its stack effect from the code all
+    the way down, trusting no stack comment (decided 2026-11-20).
 
     The first release takes the language as far as score-guided search needs
     it (decision 38, Part 9f), and that library is written in the language

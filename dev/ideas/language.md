@@ -4,9 +4,10 @@ Decisions 30 to 32 and 34 in [PLAN.md](../PLAN.md) settle that Leviathan
 gets a language of its own, what shape it takes, that its quotations are
 ordinary lists, and when work on it starts. The language names what code
 needs, never a chip, and the toolchain decides where each task runs. The
-release never waits for it, and D12 decides whether Study's concept map is
-written in it. This file holds the thinking that is still open. Nothing here
-is decided.
+release waits for the part of it that score-guided search needs (decision
+32), and D12 decides whether Study's concept map is written in it. The
+language is named Uroko. This file holds the thinking that is still open.
+Nothing else here is decided.
 
 ## A sketch
 
@@ -98,7 +99,9 @@ whole (decision 30). They are worth reading before the design goes further.
 
 ## Open questions
 
-- **Name.** None is chosen.
+- **Name.** Uroko, the Japanese word for a scale, chosen on 2026-11-20 for
+  Leviathan's scales. It is Uroko Forth instead if the checker and compiler
+  show it to be a dialect of Forth rather than a language of its own.
 - **How kinds are written.** Akashic's stack comments already use informal
   names such as `addr`, `u`, `n`, `flag` and `xt`, and the sketch names
   objects after their records, such as `concept`. The checker for
