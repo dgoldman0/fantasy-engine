@@ -372,7 +372,10 @@ whole (decision 30). They are worth reading before the design goes further.
   `RECORD` defines a record's words, `TASK` hands work to the job service,
   and Uroko's `;` checks the word it closes against the words defined
   before it, as the host prototype checks a module against its REQUIRE
-  closure. MegaPad compiles each word with KDOS's own compiler, and LM1
+  closure. MegaPad compiles each word with the BIOS's compiler, which
+  already turns every Forth definition into native code as it is compiled,
+  so `uroko.f` adds checking and Uroko's forms above it and no second code
+  generator. LM1
   compiles a word from its list form, in Lisp, when a task that uses it
   arrives there. The image builder runs the same module in the simulator
   during a build, as it already boots each image once to record token
