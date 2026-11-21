@@ -5,10 +5,10 @@ gets a language of its own, what shape it takes, that its quotations are
 ordinary lists, and when work on it starts. The language names what code
 needs, never a chip, and the toolchain decides where each task runs. The
 release waits for the part of it that score-guided search needs (decision
-32), and D12 decides whether Study's concept map is written in it. The
+32), and Study's concept map is written in it (D12, decided 2026-11-20). The
 language is named Uroko. This file holds the thinking that is still open;
-the items marked decided are settled. Part 9d's rules for objects are now
-specified as a proposal, in MegaPad's `docs/managed-data.md` and LM1's
+the items marked decided are settled. Part 9d's rules for objects are
+specified (decided 2026-11-20) in MegaPad's `docs/managed-data.md` and LM1's
 `spec/05-memory-gc.md` §12, and the section on objects below gives Uroko's
 side of them.
 
@@ -73,7 +73,7 @@ on a flat list of words.
 
 ## Objects and the rules for them
 
-Proposed on 2026-11-20. An object is data in LM1's tagged format that a
+Decided on 2026-11-20. An object is data in LM1's tagged format that a
 collector manages: a record, a list, a string, a vector or a bytevector
 (decision 31). On Leviathan, objects that code on MegaPad can reach live in
 the shared heap, in memory MegaPad lends LM1, and LM1's collector frees
@@ -258,9 +258,9 @@ the rules describe what code needs and never which chip serves it. On a
 machine without LM1, MegaPad's own engine can serve managed data with the
 same words and records: its collector runs on a MegaPad core and holds the
 other cores out the same way. The simplest engine that conforms never frees
-anything, so every rule holds and only memory use differs. Whether the
-release builds a collector for MegaPad is open, since every release
-configuration has LM1.
+anything, so every rule holds and only memory use differs. The release
+builds that engine and no collector for MegaPad (decided 2026-11-20), since
+every release configuration has LM1.
 
 A task keeps four rules on either engine, which LM1's `spec/06-runtime.md`
 §3.5 states for LM1:
@@ -343,17 +343,14 @@ whole (decision 30). They are worth reading before the design goes further.
   (`docs/concurrency/future.md`). A result could be polled each frame or
   handed to a quotation that runs when the task ends. Its objects cross as
   handles either way (the section on objects above).
-- **A task's inputs while it runs.** The task cannot write its inputs, but
-  nothing yet stops the code that started it from writing them while it
-  runs, which would let the result depend on timing and so on placement.
-  The checker cannot see every alias of what a task can reach. The choices
-  are a rule left to the programmer, which the checker enforces where it
-  sees the object itself written between the start and the result; a mark
-  on every object a task can reach, which the store words check at the cost
-  of a load and which costs a walk of that graph to set; or copying the
-  inputs, which costs their size. The first is cheap and leaves a hole that
-  only testing finds; the concept map's search would keep it by cancelling a
-  search when the map changes.
+- **A task's inputs while it runs** (decided 2026-11-20). The task cannot
+  write its inputs, and the code that started it leaves them unchanged until
+  the task ends, so the result never depends on timing or placement. The
+  programmer keeps this rule. The checker enforces it where it sees the
+  object itself written between the start and the result, but it cannot see
+  every alias of what a task can reach, so testing finds the rest. The
+  concept map's search keeps the rule by cancelling a search when the map
+  changes.
 - **The machine description.** What it holds (the engines, which devices and
   kinds each serves, and what work costs on each), who writes it, and
   whether costs are declared or measured. Also whether a program may add
@@ -417,11 +414,12 @@ needs nothing from LM1, and is tried first on existing Akashic code. The
 same tracking lets the compiler insert windows and handles (decision 31),
 which needs 9d's rules in a form it can test: which words open and close a
 window, which words write managed objects, and which words make and release
-handles. MegaPad's `docs/managed-data.md` now gives those words, as a
-proposal, and the section on objects above lists what a later round of the
-checker enforces. Study's concept map is the first managed-data code it
-would handle, and D12 decides, now that 9d's rules are specified, whether
-that map is written in the language.
+handles. MegaPad's `docs/managed-data.md` now gives those words (decided
+2026-11-20), and the section on objects above lists what a later round of
+the checker enforces. Study's concept map is the first managed-data code it
+handles, and the map is written in the language (D12). Its view on MegaPad
+is written in the language too if the compiler handles a draft of the
+view's code, and in Forth under 9d's rules if it cannot yet.
 
 ## In the Workshop
 
