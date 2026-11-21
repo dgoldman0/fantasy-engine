@@ -21,10 +21,11 @@ its item's name after a colon, inside the stack comment. A slot that holds
 execution tokens states their effect as `xt( ... )`. A named effect is
 declared once, as `( kind: nio-io xt( ... ) )`, and used as
 `( holds: nio-io )`. `port|0: nio-port` names a cell that holds a port or
-zero, and `s': span` names part of an input span. Every other spelling here
-is a guess: objects and records, tasks, windows and handles, kinds for tile
-arrays, and kernels wait on the compiler and on Part 9d's rules, which the
-section on objects below proposes.
+zero, and `s': span` names part of an input span. Quotations are written in
+braces, `{ DUP * }` (decided 2026-11-20). Every other spelling here is a
+guess: records, tasks, kinds for tile arrays and kernels wait on the
+compiler, and the section on objects below gives the words for windows and
+handles.
 
 ```forth
 RECORD concept  ( name: string  links: list )
@@ -34,7 +35,7 @@ RECORD concept  ( name: string  links: list )
 
 : nearby  ( c: concept -- l: list )          \ one or two links away
     DUP concept.links
-    DUP [ concept.links ] MAP CONCAT
+    DUP { concept.links } MAP CONCAT
     APPEND UNIQUE  SWAP REMOVE ;
 
 : title  ( buf: span  c: concept -- n: u )   \ copy the name into a buffer
@@ -44,7 +45,7 @@ VARIABLE shown  ( holds: concept )           \ the concept on screen
 VARIABLE near   ( holds: task )              \ nearby concepts, once ready
 
 : ask  ( -- )                                \ start a task; returns at once
-    shown @ [ nearby ] TASK  near ! ;
+    shown @ { nearby } TASK  near ! ;
 ```
 
 The kinds describe data. `span`, `u` and `task` are plain data, while
@@ -60,11 +61,11 @@ objects below shows what it would make of `title` and `shown`.
 Quotations are ordinary lists (decision 34), so the same code is also data:
 
 ```forth
-3 [ DUP * ] CALL        \ runs the list: 9
-[ DUP * ] LENGTH        \ treats it as data: 2
+3 { DUP * } CALL        \ runs the list: 9
+{ DUP * } LENGTH        \ treats it as data: 2
 
-: adder  ( n -- quot )      [ + ] CONS ;   \ 5 adder gives [ 5 + ]
-: twice  ( quot -- quot )   DUP APPEND ;   \ [ 1 + ] twice gives [ 1 + 1 + ]
+: adder  ( n -- quot )      { + } CONS ;   \ 5 adder gives { 5 + }
+: twice  ( quot -- quot )   DUP APPEND ;   \ { 1 + } twice gives { 1 + 1 + }
 ```
 
 `adder` captures a value by putting it into the list, which does a
@@ -388,9 +389,14 @@ whole (decision 30). They are worth reading before the design goes further.
   earlier one that differs only in case. The sandbox language is
   case-sensitive, with reserved words in uppercase. Words compiled to Forth
   inherit KDOS's rule.
-- **Lisp data in the source.** How list literals and symbols are written in
-  a stack language, and whether macros are words that transform quotation
-  lists while compiling or Forth immediate words.
+- **Lisp data in the source.** Quotations and list literals are written in
+  braces, `{ 1 2 3 }` (decided 2026-11-20). Forth's `[` and `]` leave and
+  re-enter compilation, as in `[ _NRF-PAIR ] LITERAL`, and Akashic uses
+  them that way on some 355 lines. MegaPad's BIOS gives `[:` and `;]`
+  Forth 2012's meaning, a code quotation that leaves an execution token.
+  No word in the BIOS, KDOS or Akashic is named `{` or `}`. How symbols are
+  written, and whether macros are words that transform quotation lists
+  while compiling or Forth immediate words, is open.
 - **Microcore kernels.** A microcore kernel is a word in a restricted Forth
   subset that works only in caller-owned buffers and may not allocate,
   perform I/O or throw (Akashic `docs/concurrency/microcore-kernels.md`).
