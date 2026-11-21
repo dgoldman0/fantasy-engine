@@ -5,7 +5,7 @@ gets a language of its own, what shape it takes, that its quotations are
 ordinary lists, and when work on it starts. The language names what code
 needs, never a chip, and the toolchain decides where each task runs. The
 release waits for the part of it that score-guided search needs (decision
-32), and Study's concept map is written in it (D12, decided 2026-11-20). The
+32), and Study's concept map is written in it (decided 2026-11-20). The
 language is named Uroko. This file holds the thinking that is still open;
 the items marked decided are settled. Part 9d's rules for objects are
 specified (decided 2026-11-20) in MegaPad's `docs/managed-data.md` and LM1's
@@ -358,9 +358,9 @@ whole (decision 30). They are worth reading before the design goes further.
   Halide's schedules do.
 - **Inserting windows and handles.** The section on objects says what the
   compiler inserts, but whether that insertion works well is untested
-  (decision 31). D12 waits on that evidence: a draft of the concept map's
-  view, compiled for MegaPad, shows whether the windows come out short and
-  the handles few.
+  (decision 31). A draft of the concept map's view, compiled for MegaPad,
+  shows whether the windows come out short and the handles few, and so
+  whether that view is written in the language (decision 32).
 - **Authority and Akashic's words.** Authority reaches code as capability
   values (decision 31), but Akashic's existing words reach devices directly.
   Where that boundary sits is open.
@@ -417,9 +417,9 @@ window, which words write managed objects, and which words make and release
 handles. MegaPad's `docs/managed-data.md` now gives those words (decided
 2026-11-20), and the section on objects above lists what a later round of
 the checker enforces. Study's concept map is the first managed-data code it
-handles, and the map is written in the language (D12). Its view on MegaPad
-is written in the language too if the compiler handles a draft of the
-view's code, and in Forth under 9d's rules if it cannot yet.
+handles, and the map is written in the language (decision 32). Its view on
+MegaPad is written in the language too if the compiler handles a draft of
+the view's code, and in Forth under 9d's rules if it cannot yet.
 
 ## In the Workshop
 
