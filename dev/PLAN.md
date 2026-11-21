@@ -212,10 +212,18 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     awkward; syntax waits for it. Kinds are declared inside the stack
     comment, each after its item's name and a colon, so the source stays
     plain Forth, and an item with no kind is a plain cell (decided
-    2026-11-20). The compiler runs in the image builder on the host and
-    emits each engine's own system language: Forth source,
-    which KDOS loads like any other, for a word placed on MegaPad, and Lisp,
-    which LM1's runtime compiles, for a word placed on LM1. A word stays on
+    2026-11-20). The compiler runs on the machine, so KDOS loads a Uroko
+    module the way it loads Forth and Uroko can be typed at the prompt
+    (decided 2026-11-20). Uroko's words are a MegaPad system module,
+    `uroko.f`, which also declares the BIOS's and KDOS's words' kinds. The
+    checker runs as each definition closes, against the words defined before
+    it, as the host prototype already checks a module against its REQUIRE
+    closure. MegaPad compiles each word with KDOS's own compiler, and LM1
+    compiles a word from its list form, in Lisp, when a task that uses it
+    arrives there. The image builder runs the same module in the simulator
+    during a build, as it already boots each image once to record token
+    forms, so there is one compiler, written in Forth rather than in Python
+    on the host. A word stays on
     MegaPad unless the checker works out its stack effect from the code all
     the way down, trusting no stack comment (decided 2026-11-20). A word
     that runs execution tokens kept in a slot qualifies once its module is
@@ -236,8 +244,10 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     end, and a check confirms that nothing else escapes, so the same program
     runs on one engine and on two and the results can be compared. The
     release waits for this much of the language: by estimate 80 to 130 agent
-    hours for the first version and 100 to 170 more for these additions.
-    Running lists that a program builds as it runs comes after the release.
+    hours for the first version and 100 to 170 more for these additions,
+    with the checker and compiler taking by rough estimate a third to a half
+    longer for being written in Forth. Running lists that a program builds
+    as it runs comes after the release.
 
     9d's window and handle rules are specified (decided 2026-11-20), so the
     object side follows: the compiler inserts the windows and handles, and
@@ -394,22 +404,6 @@ area budget relative to MegaPad, to which the 40 mm² freed by dropping the
 sidekick tiles returns, and compares the bandwidth of each memory option.
 The study comes back with numbers before anything is chosen. Blocks
 Part 8b.
-
-**D13. Managed data after an LM1 failure.** Part 9d's shared heap lies in
-memory MegaPad lends, so it outlives a reset of LM1, while LM1's own records
-of it, such as its card tables and remembered sets, do not. Two outcomes are
-possible:
-
-- The function fails, every handle goes stale, and the objects are lost,
-  while saved documents remain. This needs nothing more than MegaPad's
-  `docs/managed-data.md` already specifies.
-- A restarted LM1, or MegaPad's own engine, takes the shared heap back, and
-  handles stay valid. This needs the heap to be sound whenever LM1 fails,
-  in the middle of a hold included, and a restarted LM1 to rebuild its
-  records from the heap and the handle table.
-
-A study is sizing the second outcome, and the recommendation follows it.
-Blocks the failure tests of Part 9d.
 
 ## 4. Where things stand
 
@@ -1199,7 +1193,11 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   spec, fix whichever is wrong, and add a test. Decided 2026-11-20: managed
   data's collector side, which counts handles as roots, replays MegaPad's
   logged writes and waits for open windows, is built first in this module,
-  and the Python emulator does not implement it.
+  and the Python emulator does not implement it. Its collector keeps the
+  write order recovery relies on from the start: a moved object is copied
+  in full before anything points to it, it moves only into space free when
+  the hold began, a word records the hold's progress, marks stay out of
+  object headers, and shapes keep fixed IDs (Part 9d).
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
@@ -1241,7 +1239,9 @@ the language (decision 32), and the Lisp console is a learning tool.
   none, and a Leviathan vocabulary above them names functions by their
   class, as decision 31 asks. A first list of the general words is in
   MegaPad's `docs/chiplet-interconnect-plan.md`, and managed data's words
-  are in its `docs/managed-data.md`.
+  are in its `docs/managed-data.md`. The module also carries MegaPad's own
+  managed-data engine, which serves machines without LM1 and takes the
+  shared heap over when LM1 fails (Part 9d).
 - **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
@@ -1282,7 +1282,21 @@ the language (decision 32), and the Lisp console is a learning tool.
   collector's, and `dev/ideas/language.md` gives Uroko's kinds and checks.
   The concept map is written in the language (decision 32). On a machine
   without LM1, MegaPad's own engine serves the same words and never frees
-  an object. What an LM1 failure leaves of the objects is open (D13).
+  an object.
+
+  When LM1 fails, the state recorded at the failure decides what is kept,
+  as elsewhere in the system (decided 2026-11-20). Where the records show
+  the shared heap sound, MegaPad's never-free engine takes it over at once
+  and every handle stays valid; where they don't, or can't tell, the heap
+  is lost and saved documents remain. The release builds this in two
+  stages, about 34 to 67 agent hours by estimate with three fixes the rules
+  need anyway: records and write-order rules that keep the heap's state
+  readable, and MegaPad's engine adopting the heap. A restarted LM1 taking
+  the heap back joins the release if Part 8d's collector lands early, and
+  is otherwise the first work after it; recovering from a failure in the
+  middle of moving objects comes later. MegaPad's
+  `docs/managed-data-recovery.md` holds the design until it is written into
+  the managed-data specification.
 - **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds

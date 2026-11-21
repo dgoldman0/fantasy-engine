@@ -7,9 +7,6 @@ Nothing here is decided.
 
 ## Questions the plan already holds open
 
-- What managed data keeps after an LM1 failure (D13): lost, or taken back
-  by a restarted LM1. MegaPad's `docs/managed-data.md` §11 says what a
-  failure does today.
 - Whether MegaPad's and LM1's hardware designs ship with it, at the same
   recorded commits as the software (Section 1, Proposed).
 - Everything about running it on a Linux PC beyond the platform itself, such
