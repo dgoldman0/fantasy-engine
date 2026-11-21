@@ -218,7 +218,11 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     `uroko.f`, which also declares the BIOS's and KDOS's words' kinds. The
     checker runs as each definition closes, against the words defined before
     it, as the host prototype already checks a module against its REQUIRE
-    closure. MegaPad compiles each word with KDOS's own compiler, and LM1
+    closure. MegaPad compiles each word with the BIOS's compiler, which
+    already turns every Forth definition into native code as it is
+    compiled, so `uroko.f` adds checking and Uroko's forms above it and no
+    second code generator; the BIOS itself stays one for every
+    configuration and names no chiplet. LM1
     compiles a word from its list form, in Lisp, when a task that uses it
     arrives there. The image builder runs the same module in the simulator
     during a build, as it already boots each image once to record token
