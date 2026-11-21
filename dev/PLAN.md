@@ -1298,9 +1298,9 @@ the language (decision 32), and the Lisp console is a learning tool.
   readable, and MegaPad's engine adopting the heap. A restarted LM1 taking
   the heap back joins the release if Part 8d's collector lands early, and
   is otherwise the first work after it; recovering from a failure in the
-  middle of moving objects comes later. MegaPad's
-  `docs/managed-data-recovery.md` holds the design until it is written into
-  the managed-data specification.
+  middle of moving objects comes later. MegaPad's `docs/managed-data.md`
+  and LM1's `spec/05-memory-gc.md` §12 hold the design, each part marked
+  with the stage that builds it.
 - **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds
