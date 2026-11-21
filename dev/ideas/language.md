@@ -365,11 +365,20 @@ whole (decision 30). They are worth reading before the design goes further.
 - **Authority and Akashic's words.** Authority reaches code as capability
   values (decision 31), but Akashic's existing words reach devices directly.
   Where that boundary sits is open.
-- **Where the compiler runs.** The first version runs in the image builder
-  on the host and emits Forth source (decision 32). Running lists built
-  while a program runs needs a compiler on the machine as well. On Leviathan
-  that could be Lisp on LM1, Forth on MegaPad, or the language itself,
-  placed like any other program.
+- **Where the compiler runs** (decided 2026-11-20). On the machine, so KDOS
+  loads a Uroko module as it loads Forth and Uroko can be typed at the
+  prompt. Uroko's words are a MegaPad system module, `uroko.f`, which also
+  declares the base words' kinds: `{` and `}` read a quotation into a list,
+  `RECORD` defines a record's words, `TASK` hands work to the job service,
+  and Uroko's `;` checks the word it closes against the words defined
+  before it, as the host prototype checks a module against its REQUIRE
+  closure. MegaPad compiles each word with KDOS's own compiler, and LM1
+  compiles a word from its list form, in Lisp, when a task that uses it
+  arrives there. The image builder runs the same module in the simulator
+  during a build, as it already boots each image once to record token
+  forms, so there is one compiler, written in Forth. The host prototype
+  stays a measuring tool. Whether running lists a program builds as it
+  runs joins the release is still open (decision 32 puts it after).
 - **What a word is as a value.** Lists hold words themselves, not their
   names (decision 34), so a word needs an object form that every engine can
   read, leading to its definition and to whatever code each engine has
