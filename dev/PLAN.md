@@ -239,12 +239,14 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     hours for the first version and 100 to 170 more for these additions.
     Running lists that a program builds as it runs comes after the release.
 
-    The object side follows once 9d's window and handle rules are specified,
-    since the compiler inserts them, and those rules depend on the link
-    specification in Part 8. Until then, 9d's rules are written precisely
-    enough for a checker to enforce them. Whether Study's concept map, the
-    release's first managed-data component, is written in the language is
-    decided when those rules are specified (D12). The subset the release
+    9d's window and handle rules are specified (decided 2026-11-20), so the
+    object side follows: the compiler inserts the windows and handles, and
+    on either engine a store that would let a task's object escape is
+    refused, so a program that passes on one engine passes on two. Study's
+    concept map, the release's first managed-data component, is written in
+    the language. Its view on MegaPad is as well if the compiler handles a
+    draft of the view's code, and otherwise it is written in Forth under
+    9d's rules (decided 2026-11-20). The subset the release
     uses is frozen, so later changes to the language don't force changes to
     release code. The language stays small, Forth plus kinds, objects,
     capabilities and tasks, so that it doesn't split the library across a
@@ -377,10 +379,12 @@ MegaPad's memory, but it makes the package more complex, and LM1's work on
 shared data still crosses the link, since shared data is stored in
 MegaPad's memory. MegaPad's memory, reached over the link, is cheaper and
 simpler, but LM1's whole heap and collector then share MegaPad's external
-memory with Desk. Recommended: a short sizing study as the first step of
-Part 8b. It measures the work Leviathan gives LM1, which is sandbox jobs,
-Desk's managed data and borrowed tile work (decisions 27, 28 and 38),
-including how often each chip touches that data, how much traffic the
+memory with Desk. Part 9d's managed data works the same under either
+option: MegaPad's cores cannot read LM1's memory, so every object MegaPad
+reaches lies in MegaPad's memory. Recommended: a short sizing study as the
+first step of Part 8b. It measures the work Leviathan gives LM1, which is
+sandbox jobs, Desk's managed data and borrowed tile work (decisions 27, 28
+and 38), including how often each chip touches that data, how much traffic the
 collector adds, and the feature bytes each scored candidate sends through
 MegaPad's external memory (by estimate about 1,000 controller transactions
 for 64 candidates with 64-byte rows). It says whether letting the tile
@@ -391,18 +395,21 @@ sidekick tiles returns, and compares the bandwidth of each memory option.
 The study comes back with numbers before anything is chosen. Blocks
 Part 8b.
 
-**D12. Whether Study's concept map is written in the language.** The concept
-map is the release's first managed-data component (Part 9d) and the first
-user of score-guided search (Part 9f), whose library is written in the
-language. Since the release now builds the language's LM1 backend and tasks
-on LM1 (decision 32), the map's data and its search can be written in the
-language and run on LM1, where they need no windows or handles; only code on
-MegaPad does. The open part is the map's view on MegaPad, where the compiler
-must insert 9d's windows and handles. The choice is made when 9d's window
-and handle rules are specified. Recommended: write the map in the language,
-and decide its view on the evidence of the compiler handling a draft of the
-view's code; if it cannot yet, the view alone is written in Forth under 9d's
-rules. Blocks the concept map's implementation in Part 9d.
+**D13. Managed data after an LM1 failure.** Part 9d's shared heap lies in
+memory MegaPad lends, so it outlives a reset of LM1, while LM1's own records
+of it, such as its card tables and remembered sets, do not. Two outcomes are
+possible:
+
+- The function fails, every handle goes stale, and the objects are lost,
+  while saved documents remain. This needs nothing more than MegaPad's
+  `docs/managed-data.md` already specifies.
+- A restarted LM1, or MegaPad's own engine, takes the shared heap back, and
+  handles stay valid. This needs the heap to be sound whenever LM1 fails,
+  in the middle of a hold included, and a restarted LM1 to rebuild its
+  records from the heap and the handle table.
+
+A study is sizing the second outcome, and the recommendation follows it.
+Blocks the failure tests of Part 9d.
 
 ## 4. Where things stand
 
@@ -443,7 +450,9 @@ updated for the work done since.
 - Its 326 test files run only through Makefile targets such as
   `make test-sequential`, which build the accelerator first;
   `tests/conftest.py` stops a bare `pytest` run.
-- Nothing in MegaPad mentions LM1.
+- Its docs specify the chiplet link, the interconnect with LM1 as its first
+  chiplet, and managed data, and its emulator and simulator model MegaPad's
+  side of the link and a test chiplet (Parts 3d and 8c).
 
 ### Akashic (`akashic/`, 697 library files in 31 groups)
 
@@ -1147,11 +1156,16 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
     (decision 27).
   - Let LM1 compute with full 64-bit integers that wrap, as the sandbox's
     do, without the collector mistaking them for references. LM1's fixnums
-    hold 63 bits and trap on overflow.
+    hold 63 bits and trap on overflow. Records now hold whole cells in raw
+    words after their tagged fields (`spec/01-object-model.md`); registers
+    and stacks remain.
   - Give the objects MegaPad holds a place among the collector's roots, and
     define how MegaPad's writes reach the collector's records (decision 28).
-    The spec's roots cover only LM1's own registers, stacks, tables and
-    buffers.
+    Done 2026-11-20 in `spec/05-memory-gc.md` §12: MegaPad's handles are
+    roots, and LM1 replays the writes MegaPad logs through its own barrier.
+  - Define LM1's extended object header, so that objects of more than 65,535
+    fields, such as long strings and vectors, can be made at production size
+    (decided 2026-11-20).
   - Answer a question raised in March: does LM1 adopt MegaPad's hard QoS
     and one-instruction-per-cycle rule? Its companion, who runs the
     self-test, is settled by the interconnect design (decision 37): each
@@ -1174,13 +1188,18 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   and the queues and offers through which the chips exchange work: rings of
   64-byte entries in lent memory, each count written by one chip, found
   through a control block whose address the port hands the chiplet at
-  release. To do: the software at both ends of the queues, and LM1's layer.
+  release. LM1's layer for managed data is in MegaPad's
+  `docs/managed-data.md` (decided 2026-11-20). To do: the software at both
+  ends of the queues, and LM1's layer for jobs and tile work.
 - **8d. The chiplet module** (Decided). LM1's model is written in
   accelerated C++ as a chiplet module that MegaPad's simulator imports
   through Part 3d's interface, and it is built from `lm1/`. The Python
   emulator stays the reference model until the module is complete. It may be
   wrong too, so the spec is the referee: when the two disagree, check the
-  spec, fix whichever is wrong, and add a test.
+  spec, fix whichever is wrong, and add a test. Decided 2026-11-20: managed
+  data's collector side, which counts handles as roots, replays MegaPad's
+  logged writes and waits for open windows, is built first in this module,
+  and the Python emulator does not implement it.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
@@ -1192,10 +1211,12 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   cluster to MegaPad's RTL. To do: wire them into LM1's top level.
 - **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
   build the Lisp runtime image that MegaPad loads.
-- **8g. Verification.** Link conformance tests, including handles that
-  survive a collection and writes from MegaPad, are shared by the chiplet
-  module, the Python reference and both RTL sides. Close the RTL test gaps
-  listed in `docs/test_gap_ideas.md`.
+- **8g. Verification.** Link conformance tests are shared by the chiplet
+  module, the Python reference and both RTL sides. Managed data's tests,
+  among them handles that survive a collection and writes from MegaPad, are
+  listed in MegaPad's `docs/managed-data.md` §15; they run on the chiplet
+  module and the RTL, since the Python reference does not implement managed
+  data. Close the RTL test gaps listed in `docs/test_gap_ideas.md`.
 
 Done when the simulator loads the chiplet module, MegaPad boots the chiplet
 over the link and runs Lisp work sent from KDOS, and both RTL sides pass the
@@ -1219,7 +1240,8 @@ the language (decision 32), and the Lisp console is a learning tool.
   words. The module's general chiplet words serve any chiplet and name
   none, and a Leviathan vocabulary above them names functions by their
   class, as decision 31 asks. A first list of the general words is in
-  MegaPad's `docs/chiplet-interconnect-plan.md`.
+  MegaPad's `docs/chiplet-interconnect-plan.md`, and managed data's words
+  are in its `docs/managed-data.md`.
 - **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
@@ -1242,7 +1264,8 @@ the language (decision 32), and the Lisp console is a learning tool.
      collector's records.
   3. It works with them only inside short windows, and inside one it can
      follow references freely. The collector waits for open windows to
-     close before it moves shared objects.
+     close before it moves or frees shared objects, and code inside a
+     window waits for nothing but new space for objects.
   4. Anything it keeps past a window, it keeps as a handle. The collector
      treats handles as in use and updates them when objects move. Each
      handle belongs to an owner Desk already tracks, such as an applet, a job
@@ -1253,9 +1276,13 @@ the language (decision 32), and the Lisp console is a learning tool.
   them in advance, while its own buffers, such as screen frames, stay as
   they are. Study's concept map is the first user, and Investigation's graph
   follows after the alpha. Feeds, records and documents move over as applets
-  need them. The rules are written precisely enough for a checker to enforce
-  them (decision 32). Whether the concept map is written in the language or
-  in Forth is decided when these rules are specified (D12).
+  need them. The rules are specified precisely enough for a checker to
+  enforce them (decided 2026-11-20): MegaPad's `docs/managed-data.md` gives
+  MegaPad's side and the link's, LM1's `spec/05-memory-gc.md` §12 gives the
+  collector's, and `dev/ideas/language.md` gives Uroko's kinds and checks.
+  The concept map is written in the language (decision 32). On a machine
+  without LM1, MegaPad's own engine serves the same words and never frees
+  an object. What an LM1 failure leaves of the objects is open (D13).
 - **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds
@@ -1367,16 +1394,15 @@ or before a chip is made, a lawyer reviews the licensing.
 - The language (decision 32) starts with the checker, begun on 2026-11-20,
   and proceeds alongside the three leading parts. The release waits for the
   part of it that score-guided search needs (9f), and its LM1 backend
-  follows LM1's runtime and compiler (Parts 8d and 8f). Whether Study's
-  concept map is written in it is decided when 9d's rules are specified
-  (D12).
+  follows LM1's runtime and compiler (Parts 8d and 8f). Study's concept map
+  is written in it (decision 32).
 - Part 6 needs Parts 4 and 5. Part 7 needs Parts 1d, 2 and 5. Part 9 needs
   Part 5 and Parts 3d, 8c and 8d, and 9f also needs Parts 3a and 3f and the
   language.
 - Within Part 9, the sandbox (9c) comes first, since it needs only jobs
-  handed over and results handed back. Managed data (9d) follows once the
-  link's handle and window rules are specified, and Study's concept map
-  waits for it. Score-guided search (9f) follows the link software of 9a
+  handed over and results handed back. Managed data (9d), whose handle and
+  window rules are now specified, follows LM1's chiplet module (8d), which
+  builds the collector's side first, and Study's concept map waits for it. Score-guided search (9f) follows the link software of 9a
   and 9c and the language's LM1 backend, and Study's link suggestions follow
   the concept map.
 - Part 10 grows with every part and is finished before Part 11.
