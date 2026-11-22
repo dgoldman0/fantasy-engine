@@ -406,8 +406,10 @@ engines read their operands from LM1's memory, which is not built, would
 repay the work by taking that traffic off Desk's memory. It also sets an
 area budget relative to MegaPad, to which the 40 mm² freed by dropping the
 sidekick tiles returns, and compares the bandwidth of each memory option.
-The study comes back with numbers before anything is chosen. Blocks
-Part 8b.
+Its area and timing figures come from synthesizing the RTL, not from
+judgment alone; fitting an FPGA stays outside the gate (decided
+2026-11-22). The study comes back with numbers before anything is chosen.
+Blocks Part 8b.
 
 ## 4. Where things stand
 
@@ -1188,6 +1190,17 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
     chiplet tests itself, and MegaPad starts the tests and collects the
     results.
   - Fix the spec's contradictions in §3.1 and §12.1.
+  - State the memory model of a cluster's shared memory (decided
+    2026-11-22): the order in which one tile sees another's stores, what a
+    byte, halfword or 32-bit store guarantees about the rest of its word,
+    and `CAS.TAGGED` and `FAA` atomic across the tiles that share memory.
+    The atomics run inside the crossbar as single requests, which also
+    serves a future network between clusters. Today they are atomic only
+    within a tile (`rtl/doc/04-memory.md`). 8e builds the model and 8g
+    tests it.
+  - Once D8 has chosen the topology, list the features between clusters
+    that the release builds and tests: the network, DMA and cross-cluster
+    memory. The RTL has only the cluster's stub uplink today.
   - Give the movement engines a path to the link, so that they move the
     shared heap of Part 9d, and LM1's own heap too if D8 keeps LM1's main
     memory in MegaPad's memory (expected, 2026-11-22). D8's sizing study
@@ -1251,6 +1264,21 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   image and MegaPad's tile engines store results into memory LM1 lends
   (decision 38), and a bench joins the endpoint, the fetch and a two-tile
   cluster to MegaPad's RTL. To do: wire them into LM1's top level.
+
+  Two parts of that work are release requirements (decided 2026-11-22):
+
+  - The cluster's shared memory keeps 8b's memory model. Today a core can
+    drop a request the crossbar does not grant; it waits for the grant
+    instead. The crossbar carries byte enables, so a byte,
+    halfword or 32-bit store leaves the rest of its word intact; today such
+    a store to shared memory writes all eight bytes. Each response returns
+    to the request it answers, and `CAS.TAGGED` and `FAA` run as single
+    atomic requests.
+  - A thread that waits on memory gives the core to another ready thread,
+    as `spec/03-core.md` §4.2 promises. Today the core switches threads only
+    between instructions, so one thread's memory wait stalls all four. A
+    bench runs four threads against realistic memory latency and shows the
+    core kept busy while a thread waits.
 - **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
   build the Lisp runtime image that MegaPad loads.
 - **8g. Verification.** Link conformance tests are shared by the chiplet
@@ -1261,7 +1289,13 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   among them handles that survive a collection and writes from MegaPad, are
   listed in MegaPad's `docs/managed-data.md` §15; they run on the chiplet
   module and the RTL, since the Python reference does not implement managed
-  data. Close the RTL test gaps listed in `docs/test_gap_ideas.md`.
+  data. Close the RTL test gaps listed in `docs/test_gap_ideas.md`. The
+  cluster's memory model is tested on the RTL and both models under
+  contention: requests from every tile at once, byte stores side by side in
+  one word, and atomics racing across tiles (decided 2026-11-22). For that
+  the models gain a cluster's shared memory, which they lack today: each of
+  their tiles keeps its own memory and old generation, where the spec puts
+  the old generation in the cluster's shared memory.
 
 Done when the simulator loads the chiplet module, MegaPad boots the chiplet
 over the link and runs Lisp work sent from KDOS, and both RTL sides pass the
