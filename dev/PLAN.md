@@ -490,10 +490,8 @@ updated for the work done since.
   NVMe, 100 GbE and an on-die display engine. It defines no link to MegaPad.
   It contradicts itself on the SRAM total (§3.1) and on the cluster count in
   its floorplan (§12.1).
-- The emulator has 172 tests in its own harness, and nine of them fail on
-  main. Eight GC tests use a `CARD_SIZE` that commit 6a40bd2 replaced with
-  `card_shift` in February, and `alloc_nursery_overflow` fails. The same
-  nine failed before the split.
+- The emulator has 177 tests in its own harness, and all of them pass
+  (Part 8a).
 - 41 RTL tests run on Verilator against a single core; the tile, cluster and
   GC-engine RTL is not simulated. The FPGA flow stops at synthesis, at about
   90K LUTs for one 8-tile cluster.
@@ -1132,10 +1130,12 @@ inside the system can change the installed libraries.
 
 One of the three leading items (Decided). It runs alongside Parts 2 to 7.
 
-- **8a. Repair the emulator's failing tests.** Eight GC tests use the
-  `CARD_SIZE` that 6a40bd2 replaced with `card_shift`, and
-  `alloc_nursery_overflow` fails. The chiplet module in 8d builds on this
-  emulator, so it should start from green.
+- **8a. Repair the emulator's failing tests.** Done on 2026-11-22, LM1
+  commit b4292c6. The emulator's collector itself, not only its tests,
+  still used the `CARD_SIZE` that 6a40bd2 replaced, so every collection
+  failed. With it repaired, the write barrier follows the spec, so a
+  collection keeps every young object an old one refers to, and the
+  chiplet module in 8d starts from a green reference.
 - **8b. Product-scale design** (needs D8). Revise the spec for a chiplet:
   - Size it for production. The current 256 KiB per tile and 2 MiB per
     cluster are toy-scale. Interface limits stay fixed at
