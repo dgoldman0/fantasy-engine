@@ -1170,6 +1170,14 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
     chiplet tests itself, and MegaPad starts the tests and collects the
     results.
   - Fix the spec's contradictions in §3.1 and §12.1.
+  - Give the movement engines a path to the link, so that they move the
+    shared heap of Part 9d, and LM1's own heap too if D8 keeps LM1's main
+    memory in MegaPad's memory (expected, 2026-11-22). D8's sizing study
+    confirms it by measuring the traffic the moves add to MegaPad's memory.
+    The engines' description then gains the rules the spec already sets:
+    marks outside shared objects' headers, raw words skipped by their
+    layout, references stored into shared objects without metadata, and
+    completion reported only after the last write is answered.
 
   As with MegaPad, the RTL describes the chip we want. Fitting the FPGA is
   not a gate.
@@ -1201,7 +1209,14 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   write order recovery relies on from the start: a moved object is copied
   in full before anything points to it, it moves only into space free when
   the hold began, a word records the hold's progress, marks stay out of
-  object headers, and shapes keep fixed IDs (Part 9d).
+  object headers, and shapes keep fixed IDs (Part 9d). The module is built
+  in three stages (accepted 2026-11-22): the core model, checked against
+  the Python reference and the RTL testbench's programs; the module with
+  LM1's end of the link; and managed data, with MegaPad's side of it built
+  beside the module and the 27 conformance tests run through both. Until
+  LM1's Lisp runtime serves the shared heap, the module stands in for it
+  natively, and it models the moving work as the movement engines of 8b.
+  LM1's `design/chiplet-module.md` holds the plan and its decisions.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
