@@ -46,8 +46,8 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .records import (Inputs, entry_stem, import_candidates, is_metadata_entry,
-                      sorted_listing)
+from .records import (Inputs, collection_entries, entry_stem, import_candidates,
+                      is_metadata_entry, lookup_outcome, sorted_listing)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -156,6 +156,7 @@ class Change:
 
     def __str__(self) -> str:
         what = {"file": "", "listing": "listing of ", "imports": "imports in ",
+                "lookups": "imports in ", "collection": "names pytest checks in ",
                 "metadata": "package metadata in "}
         return "%s%s (%s -> %s)" % (what[self.kind], self.path,
                                      _short(self.before), _short(self.now))
@@ -251,11 +252,38 @@ class Store:
 
     @staticmethod
     def digest_imports(path: str, candidates: frozenset[str]) -> str:
+        """The digest of folder PATH's entries named like any of CANDIDATES,
+        which a record made before lookups were noted compares."""
         names = sorted_listing(path)
         if names is None:
             return "absent"
         relevant = [name for name in names if entry_stem(name) in candidates]
         return hashlib.sha256("\n".join(relevant).encode("utf-8", "surrogateescape")).hexdigest()
+
+    @staticmethod
+    def digest_lookups(path: str, names: list[str]) -> str:
+        """The digest of what the path finder finds in folder PATH for each
+        of NAMES (records.lookup_outcome)."""
+        entries = sorted_listing(path)
+        if entries is None:
+            return "absent"
+        present = set(entries)
+        found = []
+        for name in names:
+            outcome = lookup_outcome(path, present, name)
+            if outcome:
+                found.append("%s=%s" % (name, outcome))
+        return hashlib.sha256("\n".join(found).encode("utf-8", "surrogateescape")).hexdigest()
+
+    @staticmethod
+    def digest_collection(path: str, names: list[str]) -> str:
+        """The digest of which of NAMES, those pytest checks there, folder
+        PATH holds (records.collection_entries)."""
+        entries = sorted_listing(path)
+        if entries is None:
+            return "absent"
+        held = collection_entries(path, entries, names)
+        return hashlib.sha256("\n".join(held).encode("utf-8", "surrogateescape")).hexdigest()
 
     @staticmethod
     def digest_metadata(path: str) -> str:
@@ -281,24 +309,35 @@ class Store:
 
         name = locations.name if locations is not None else (lambda path: path)
         ignored = locations.ignored if locations is not None else (lambda path: frozenset())
-        candidates = import_candidates(inputs.import_names)
-        return {
+        described = {
             "files": {name(path): _kept(self.digest_file(path))
                       for path in inputs.files},
             "listings": {name(path): _kept(self.digest_listing(path, ignored(path)))
                          for path in inputs.listings},
-            "imports": {
-                name(path): _kept(self.digest_imports(path, candidates))
-                for path in inputs.import_listings
-            },
+            # Neither a module that would shadow an import nor a file pytest
+            # checks is ever left out as ignored by git: either changes the
+            # run wherever it lies.
+            "lookups": {name(path): [_kept(self.digest_lookups(path, names)), names]
+                        for path, names in inputs.lookups.items()},
+            "collections": {name(path): [_kept(self.digest_collection(path, names)), names]
+                            for path, names in inputs.collections.items()},
             "metadata": {
                 name(path): _kept(self.digest_metadata(path))
                 for path in inputs.metadata_listings
             },
-            "import_names": inputs.import_names,
             "state": [name(path) for path in inputs.state],
             "unrecordable": sorted(unrecordable),
         }
+        # A folder the import system listed without a lookup on record, which
+        # the recorder's wrapped finder should never leave, counts as records
+        # made before lookups did: by every entry named like any import.
+        unlooked = [path for path in inputs.import_listings if path not in inputs.lookups]
+        if unlooked:
+            candidates = import_candidates(inputs.import_names)
+            described["imports"] = {name(path): _kept(self.digest_imports(path, candidates))
+                                    for path in unlooked}
+            described["import_names"] = inputs.import_names
+        return described
 
     def changes(self, described: dict, limit: int | None = 1,
                 locations=None) -> list[Change]:
@@ -323,11 +362,20 @@ class Store:
             path = where(name)
             if note("listing", path, before, self.digest_listing(path, ignored(path))):
                 return found
-        candidates = import_candidates(described["import_names"])
-        for name, before in described["imports"].items():
+        for name, (before, names) in described.get("lookups", {}).items():
             path = where(name)
-            if note("imports", path, before, self.digest_imports(path, candidates)):
+            if note("lookups", path, before, self.digest_lookups(path, names)):
                 return found
+        for name, (before, names) in described.get("collections", {}).items():
+            path = where(name)
+            if note("collection", path, before, self.digest_collection(path, names)):
+                return found
+        if described.get("imports"):
+            candidates = import_candidates(described.get("import_names", []))
+            for name, before in described["imports"].items():
+                path = where(name)
+                if note("imports", path, before, self.digest_imports(path, candidates)):
+                    return found
         for name, before in described["metadata"].items():
             path = where(name)
             if note("metadata", path, before, self.digest_metadata(path)):

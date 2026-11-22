@@ -8,6 +8,28 @@ new thing Python's audit hooks show it doing: opening, writing, renaming or
 removing files, listing directories, importing modules, starting programs
 and reaching the network.  The runner merges the files after the run.
 
+The audit hooks do not show which names the import system looks for in each
+folder, and a folder's listing alone would make every file added there an
+input.  The recorder therefore wraps the path finder's lookup in a folder
+(``FileFinder.find_spec``) and notes each name looked up in each folder:
+the folders before the one that resolved an import, where a new file would
+shadow it, the resolving folder itself, and every folder an import that
+failed searched.  This covers imports through ``importlib.import_module``,
+which raise no audit event, as pytest's import of each test file does.
+Imports made before this module loaded are noted as looked up in every
+folder of the path at startup, the most they could have searched.  A path
+entry that no lookup could use, such as a missing folder or a zip file, is
+noted as a read, so that its appearance or change runs the unit again.
+
+pytest's collection lists each folder on the way from its root to a test
+file it was given, and builds and discards a collector for every other
+entry there.  When every implementation of the hooks that build those
+collectors is pytest's own, the result of the run depends only on the
+names pytest checks by name in such a folder (``_PYTEST_CONSULTED``), so
+the recorder notes that listing with those names only.  Any other listing,
+such as a test's own glob, or pytest's collection of a folder it was given,
+counts in full.
+
 Without FE_TESTSEL_RECORD_DIR the module only hands over to the next
 ``sitecustomize`` on the path, which this one would otherwise hide.
 """
@@ -39,6 +61,22 @@ _EVENTS = (
     | _PROGRAM_EVENTS | frozenset(_WRITE_EVENTS) | _NETWORK_EVENTS
 )
 _LOCAL_HOSTS = frozenset(("127.0.0.1", "::1", "localhost", "", "0.0.0.0", "::"))
+
+# The names pytest checks by name, through file tests no audit event shows,
+# in a folder its collection lists on the way to a path it was given: the
+# package marker that makes the folder a package and names the test module,
+# the conftest it loads, and the configuration files and setup.py that
+# decide its root folder and settings (_pytest/python.py, _pytest/config/
+# __init__.py and findpaths.py in pytest 9).  Every other entry only gets a
+# collector that pytest discards.
+_PYTEST_CONSULTED = ("__init__.py", "conftest.py", "pytest.toml", ".pytest.toml",
+                     "pytest.ini", ".pytest.ini", "pyproject.toml", "tox.ini",
+                     "setup.cfg", "setup.py")
+# The hooks pytest calls for each entry of such a folder.  A plugin or
+# conftest that implements one may act on any entry, so the listing then
+# counts in full.
+_PYTEST_COLLECTION_HOOKS = ("pytest_ignore_collect", "pytest_collect_directory",
+                            "pytest_collect_file", "pytest_pycollect_makemodule")
 
 # Programs that only start another program; the one they start decides.
 # Each maps to the options that take a separate argument, and to how many
@@ -205,13 +243,53 @@ class _Recorder:
         os.write(self.fd, data.encode("utf-8", "surrogateescape"))
 
     def emit(self, kind, path, **extra):
-        key = (kind, path, extra.get("why"), extra.get("file"))
+        key = (kind, path) + tuple(
+            (name, tuple(value) if isinstance(value, (list, tuple)) else value)
+            for name, value in sorted(extra.items()))
         if key in self.seen:
             return
         self.seen.add(key)
         item = {"t": kind, "p": path}
         item.update(extra)
         self.line(item)
+
+    def lookup(self, folder, fullname):
+        """Note that the import system looked for FULLNAME in FOLDER."""
+        try:
+            if isinstance(folder, str) and isinstance(fullname, str):
+                self.emit("l", folder, n=fullname.rpartition(".")[2])
+        except Exception as exc:  # never break the import being made
+            try:
+                self.emit("err", "lookup: %r" % exc)
+            except Exception:
+                pass
+
+    def startup_lookups(self):
+        """Note the modules imported before the recorder as looked up in
+        every folder they could have searched: the path at startup for a
+        top-level module, its package's folders for a submodule."""
+        startup = [self.path_of(entry) for entry in sys.path if isinstance(entry, str)]
+        startup = [folder for folder in dict.fromkeys(startup) if os.path.isdir(folder)]
+        for name in list(sys.modules):
+            parent, _, tail = name.rpartition(".")
+            if parent:
+                folders = getattr(sys.modules.get(parent), "__path__", None) or []
+                folders = [self.path_of(f) for f in folders if isinstance(f, str)]
+                folders = [folder for folder in folders if os.path.isdir(folder)]
+            else:
+                folders = startup
+            for folder in folders:
+                self.emit("l", folder, n=tail)
+
+    def unfound_entries(self):
+        """Note each path entry the path finder consulted but could not
+        search as a folder, such as a missing folder or a zip file: it is
+        read as a whole, so its appearance or change counts."""
+        from importlib.machinery import FileFinder
+
+        for entry, finder in list(sys.path_importer_cache.items()):
+            if isinstance(entry, str) and not isinstance(finder, FileFinder):
+                self.emit("r", self.path_of(entry))
 
     def hook(self, event, args):
         if event not in _EVENTS:
@@ -247,7 +325,11 @@ class _Recorder:
             if isinstance(path, int):
                 return
             path = self.path_of(path if path is not None else os.curdir)
-            self.emit(self.listing_kind(), path)
+            kind = self.listing_kind()
+            if kind == "p":
+                self.emit(kind, path, n=list(_PYTEST_CONSULTED))
+            else:
+                self.emit(kind, path)
         elif event == "import":
             name = args[0]
             self.emit("m", name)
@@ -296,12 +378,15 @@ class _Recorder:
     def listing_kind(self):
         """Who listed a directory decides which of its entries matter.
 
-        The import system's finder ("i") looks only for entries named like a
-        module being imported, and importlib.metadata ("e") only for package
-        metadata folders; any other listing ("d") counts in full.
+        The import system's finder ("i") looks only for the names its
+        lookups note, and importlib.metadata ("e") only for package
+        metadata folders.  pytest's collection of a folder on the way to a
+        path it was given ("p") depends only on the names it checks there
+        (see ``pytest_leads_through``).  Any other listing ("d") counts in
+        full.
         """
         try:
-            frame = sys._getframe(3)
+            caller = frame = sys._getframe(3)
         except ValueError:
             return "d"
         for _ in range(3):
@@ -313,7 +398,57 @@ class _Recorder:
             if code.co_name == "children" and "metadata" in code.co_filename:
                 return "e"
             frame = frame.f_back
+        if self.pytest_leads_through(caller):
+            return "p"
         return "d"
+
+    def pytest_leads_through(self, frame):
+        """Whether FRAME is pytest listing a folder for its collection, the
+        folder lies on the way to a path pytest was given without being
+        one, and every implementation of the hooks pytest calls for the
+        folder's entries is pytest's own.  The collector of each other entry
+        is then built and discarded, and only the names in
+        _PYTEST_CONSULTED decide the run.  A pytest whose collection works
+        otherwise fails one of these tests, and its listings count in full.
+        """
+        code = frame.f_code
+        if code.co_name != "scandir" or not code.co_filename.endswith(
+                os.path.join("_pytest", "pathlib.py")):
+            return False
+        collect = frame.f_back
+        if collect is None or collect.f_code.co_name != "collect":
+            return False
+        nodes = sys.modules.get("_pytest.nodes")
+        directory = getattr(nodes, "Directory", None)
+        node = collect.f_locals.get("self")
+        if directory is None or not isinstance(node, directory):
+            return False
+        session = node.session
+        leading = getattr(session, "_initialpaths_with_parents", None)
+        given = getattr(session, "_initialpaths", None)
+        if leading is None or given is None:
+            return False
+        if node.path not in leading or node.path in given:
+            return False
+        return self.pytest_hooks_are_its_own(session)
+
+    @staticmethod
+    def pytest_hooks_are_its_own(session):
+        """Whether pytest's own modules implement every collection hook the
+        session has registered so far; checked at each listing, since a
+        plugin may register later."""
+        hooks = session.config.pluginmanager.hook
+        for name in _PYTEST_COLLECTION_HOOKS:
+            caller = getattr(hooks, name, None)
+            if caller is None:
+                return False
+            for implementation in caller.get_hookimpls():
+                plugin = implementation.plugin
+                module = (plugin.__name__ if isinstance(plugin, type(sys))
+                          else type(plugin).__module__)
+                if not (isinstance(module, str) and module.startswith("_pytest.")):
+                    return False
+        return True
 
     def resolve_pending(self):
         pending, self.pending = self.pending, []
@@ -395,9 +530,28 @@ class _Recorder:
                 origin = getattr(module, "__file__", None)
                 if isinstance(origin, str) and origin:
                     self.emit("r", os.path.abspath(origin))
+            self.unfound_entries()
             self.line({"t": "end"})
         except Exception:
             pass
+
+
+def _watch_lookups(recorder):
+    """Wrap the path finder's lookup in a folder so that each one is noted,
+    whichever import made it."""
+    from importlib.machinery import FileFinder
+
+    original = FileFinder.find_spec
+
+    def find_spec(self, fullname, target=None):
+        try:
+            return original(self, fullname, target)
+        finally:
+            recorder.lookup(self.path, fullname)
+
+    find_spec.__wrapped__ = original
+    find_spec.__doc__ = original.__doc__
+    FileFinder.find_spec = find_spec
 
 
 def _install():
@@ -407,11 +561,14 @@ def _install():
     recorder = _Recorder(record_dir)
     sys.addaudithook(recorder.hook)
     os.register_at_fork(after_in_child=recorder.after_fork)
+    _watch_lookups(recorder)
     # Modules imported before the hook existed still count as imports, and
-    # the folders the import system listed for them are listed again, now
-    # under the hook, the next time an import looks there.
+    # as looked up wherever they could have been; the folders the import
+    # system listed for them are listed again, now under the hook, the next
+    # time an import looks there.
     for name in list(sys.modules):
         recorder.emit("m", name)
+    recorder.startup_lookups()
     import importlib
 
     importlib.invalidate_caches()

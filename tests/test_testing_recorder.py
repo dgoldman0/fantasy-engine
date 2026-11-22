@@ -203,6 +203,93 @@ def test_the_next_sitecustomize_still_runs(tmp_path):
     assert marker.read_text() == "yes"
 
 
+def test_lookups_name_each_folder_an_import_searched(tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    (second / "found_late.py").write_text("VALUE = 1\n")
+    (first / "found_early.py").write_text("VALUE = 2\n")
+    seen = run_recorded(f"""
+        import importlib, sys
+        sys.path[:0] = [{str(first)!r}, {str(second)!r}]
+        import found_late
+        importlib.import_module("found_early")
+        try:
+            import missing_everywhere
+        except ImportError:
+            pass
+    """, tmp_path)
+    # A name is looked for in each folder up to the one that holds it, and
+    # one that is found nowhere in every folder.
+    assert {"found_late", "found_early", "missing_everywhere"} <= seen.lookups[str(first)]
+    assert {"found_late", "missing_everywhere"} <= seen.lookups[str(second)]
+    assert "found_early" not in seen.lookups[str(second)]
+    # importlib.import_module raises no import event, yet its lookups count.
+    assert "found_early" not in seen.import_names
+    assert str(first / "found_early.py") in seen.reads
+    # Modules imported before the recorder count as looked up at startup.
+    startup = os.path.dirname(os.__file__)
+    assert "os" in seen.lookups[startup]
+
+
+def test_a_path_entry_no_lookup_could_search_is_read(tmp_path):
+    missing = tmp_path / "missing"
+    seen = run_recorded(f"""
+        import sys
+        sys.path.insert(0, {str(missing)!r})
+        import colorsys
+    """, tmp_path)
+    assert str(missing) in seen.reads
+    assert str(missing) not in seen.lookups
+
+
+def _pytest_tree(tmp_path, conftest=None):
+    root = tmp_path / "proj"
+    (root / "tests" / "deeper").mkdir(parents=True)
+    (root / "pytest.ini").write_text("[pytest]\n")
+    (root / "tests" / "test_x.py").write_text("def test_x():\n    pass\n")
+    (root / "tests" / "deeper" / "test_y.py").write_text("def test_y():\n    pass\n")
+    (root / "tests" / "notes.txt").write_text("")
+    if conftest is not None:
+        (root / "tests" / "conftest.py").write_text(textwrap.dedent(conftest))
+    return root
+
+
+def _recorded_pytest(root, tmp_path, *args):
+    return run_recorded(f"""
+        import os, sys, pytest
+        os.chdir({str(root)!r})
+        sys.exit(pytest.main(["-q", "-p", "no:cacheprovider", *{list(args)!r}]))
+    """, tmp_path)
+
+
+def test_pytests_listings_on_the_way_to_a_test_keep_only_the_names_it_checks(tmp_path):
+    root = _pytest_tree(tmp_path)
+    seen = _recorded_pytest(root, tmp_path, "tests/test_x.py")
+    for folder in (root, root / "tests"):
+        assert "conftest.py" in seen.collections[str(folder)]
+        assert "__init__.py" in seen.collections[str(folder)]
+        assert str(folder) not in seen.listings
+    assert "pytest.ini" in seen.collections[str(root)]
+
+    # A folder pytest was given is collected whole, so its listing counts
+    # in full, as does every folder inside it.
+    seen = _recorded_pytest(root, tmp_path, "tests")
+    assert str(root) in seen.collections
+    assert {str(root / "tests"), str(root / "tests" / "deeper")} <= seen.listings
+    assert str(root / "tests") not in seen.collections
+
+
+def test_pytests_listings_count_in_full_when_a_conftest_hooks_collection(tmp_path):
+    root = _pytest_tree(tmp_path, conftest="""
+        def pytest_collect_file(file_path, parent):
+            return None
+    """)
+    seen = _recorded_pytest(root, tmp_path, "tests/test_x.py")
+    assert {str(root), str(root / "tests")} <= seen.listings
+    assert not seen.collections
+
+
 def test_files_read_then_rewritten_are_state_not_inputs(tmp_path):
     (tmp_path / "counter.txt").write_text("1")
     seen = run_recorded("""

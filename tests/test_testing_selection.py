@@ -961,21 +961,134 @@ def test_locations_name_a_repository_path_alike_from_every_checkout(tmp_path):
     assert places.path("@lm1/emu/x.py") == "@lm1/emu/x.py"
 
 
+LISTS_ITS_FOLDER = """
+    import os
+
+    def test_lists():
+        assert "test_l.py" in os.listdir("tests")
+"""
+
+
 def test_a_listing_counts_the_names_its_repository_does_not_ignore(
         demo, store, tmp_path):
     (demo.root / ".gitignore").write_text("*.scratch\n")
-    git = ["git", "-C", str(demo.root), "-c", "user.name=t", "-c", "user.email=t@t"]
-    subprocess.run(git + ["add", ".gitignore"], check=True)
-    subprocess.run(git + ["commit", "-q", "-m", "ignore scratch"], check=True)
-    run(demo, store, tmp_path)
+    commit_file(demo.root, "tests/test_l.py", LISTS_ITS_FOLDER, "lists its folder")
+    names = ("tests/test_a.py", "tests/test_l.py")
+    run(demo, store, tmp_path, units=[u for u in demo.units() if u.name in names])
     other = checkout_copy(demo, tmp_path)
-    (other.root / "notes.scratch").write_text("")
-    summary, ran, _ = run(other, store, tmp_path)
-    assert ran == ["tests/test_d.py"]
+    copied = [u for u in other.units() if u.name in names]
+    (other.root / "tests" / "notes.scratch").write_text("")
+    summary, ran, _ = run(other, store, tmp_path, units=copied)
+    assert ran == [] and summary.skipped == 2
+
+    # The test's own listing counts every name git does not ignore, while
+    # pytest's listing of the same folder on its way to test_a counts only
+    # the names pytest checks there.
+    (other.root / "tests" / "notes.txt").write_text("")
+    _, ran, text = run(other, store, tmp_path, units=copied)
+    assert ran == ["tests/test_l.py"]
+    assert "changed: listing of %s" % (other.root / "tests") in text
+
+
+def test_an_unrelated_file_beside_the_tests_leaves_their_units_skipped(
+        demo, store, tmp_path):
+    (demo.root / "tests" / "old-notes.txt").write_text("")
+    run(demo, store, tmp_path)
+    # Names pytest collects past without a look, and that no import seeks.
+    (demo.root / "tests" / "notes.txt").write_text("")
+    (demo.root / "tests" / "test_new.py").write_text("def test_new():\n    pass\n")
+    (demo.root / "tests" / "unused_helper.py").write_text("")
+    (demo.root / "tests" / "demo_shadowed_helper.txt").write_text("")
+    (demo.root / "README.md").write_text("")
+    (demo.root / "first" / "unrelated.py").write_text("")
+    (demo.root / "tests" / "old-notes.txt").unlink()
+    summary, ran, _ = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py"]  # it starts a program, so it always runs
     assert summary.skipped == len(TESTS) - 1
-    (other.root / "notes.txt").write_text("")
-    _, ran, text = run(other, store, tmp_path)
-    assert "changed: listing of %s" % other.root in text
+
+
+IMPORTS_BY_NAME = """
+    import importlib
+
+    def test_g():
+        helper = importlib.import_module("demo_dynamic_helper")
+        assert helper.VALUE in ("first", "second")
+        try:
+            import demo_optional_helper
+        except ImportError:
+            demo_optional_helper = None
+        assert demo_optional_helper is None or demo_optional_helper.VALUE == 1
+"""
+
+
+def test_a_module_that_would_shadow_an_import_reruns_its_unit(demo, store, tmp_path):
+    (demo.root / "second" / "demo_dynamic_helper.py").write_text("VALUE = 'second'\n")
+    commit_file(demo.root, "tests/test_g.py", IMPORTS_BY_NAME, "imports by name")
+    run(demo, store, tmp_path)
+
+    # pytest puts the test folder first on the path, so a module there
+    # shadows test_c's import from the second folder; test_g never looks
+    # for that name.
+    shadow = demo.root / "tests" / "demo_shadowed_helper.py"
+    shadow.write_text("VALUE = 'first'\n")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == ["tests/test_c.py", "tests/test_d.py"]
+    assert "changed: imports in %s" % (demo.root / "tests") in unit_line(
+        text, "demo:tests/test_c.py")
+    shadow.unlink()
+    run(demo, store, tmp_path)
+
+    # An import through importlib.import_module raises no audit event, and
+    # an import that failed searched every folder on the path.
+    (demo.root / "first" / "demo_dynamic_helper.py").write_text("VALUE = 'first'\n")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py", "tests/test_g.py"]
+    assert "changed: imports in %s" % (demo.root / "first") in text
+    (demo.root / "second" / "demo_optional_helper.py").write_text("VALUE = 1\n")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py", "tests/test_g.py"]
+    assert "changed: imports in %s" % (demo.root / "second") in text
+
+
+def test_a_conftest_or_package_marker_beside_the_tests_reruns_them(
+        demo, store, tmp_path):
+    every = ["tests/%s" % name for name in sorted(TESTS)]
+    run(demo, store, tmp_path)
+    conftest = demo.root / "tests" / "conftest.py"
+    conftest.write_text("")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == every
+    assert "changed: names pytest checks in %s" % (demo.root / "tests") in text
+    conftest.unlink()
+    run(demo, store, tmp_path)
+
+    (demo.root / "tests" / "__init__.py").write_text("")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == every
+    assert "changed: names pytest checks in %s" % (demo.root / "tests") in text
+    (demo.root / "tests" / "__init__.py").unlink()
+    run(demo, store, tmp_path)
+
+    # A configuration file in the repository's folder could change pytest's
+    # root folder and its settings.
+    (demo.root / "pytest.ini").write_text("[pytest]\n")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == every
+    assert "changed: names pytest checks in %s" % demo.root in text
+
+
+def test_a_conftest_with_collection_hooks_makes_the_listing_count_in_full(
+        demo, store, tmp_path):
+    commit_file(demo.root, "tests/conftest.py", """
+        def pytest_ignore_collect(collection_path, config):
+            return None
+    """, "a collection hook")
+    every = ["tests/%s" % name for name in sorted(TESTS)]
+    run(demo, store, tmp_path)
+    (demo.root / "tests" / "notes.txt").write_text("")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == every
+    assert "changed: listing of %s" % (demo.root / "tests") in text
 
 
 def test_akashic_runs_its_ext4_files_on_the_emulator_as_final_units(

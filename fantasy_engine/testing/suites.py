@@ -492,13 +492,16 @@ class Locations:
     resolves to are its, since a process may name a file either way.
 
     A listing of a folder inside a repository counts only the names that
-    the repository's git does not ignore.  pytest lists the repository's
-    folder and the test's folder on its way to every test file, and a
-    checkout gathers ignored names there, such as caches and scratch files,
-    which another checkout of the same commit lacks.  An ignored file that
-    a test reads is still an input by its own path, so a checkout without
-    it runs the test; a test that only counts ignored names, without
-    reading them, would go unnoticed, which a full run reveals.
+    the repository's git does not ignore.  A test that lists a folder, as a
+    glob does, would otherwise depend on the ignored names a checkout
+    gathers there, such as caches and scratch files, which another checkout
+    of the same commit lacks.  An ignored file that a test reads is still an
+    input by its own path, so a checkout without it runs the test; a test
+    that only counts ignored names, without reading them, would go
+    unnoticed, which a full run reveals.  The names the import system looks
+    for in a folder, and those pytest checks in the folders it lists on its
+    way to a test file, count whether or not git ignores them, since either
+    changes the run wherever it lies (see the recorder).
     """
 
     def __init__(self, repos: list[Repo]):

@@ -364,7 +364,8 @@ class Runner:
         excluded = (partial, Path(meta["tmp"]), self.store.path.parent)
         inputs = seen.inputs(excluded)
         for name in (inputs.files + inputs.listings + inputs.import_listings
-                     + inputs.metadata_listings + tools):
+                     + inputs.metadata_listings + list(inputs.lookups)
+                     + list(inputs.collections) + tools):
             path = Path(name)
             while not path.exists() and path != path.parent:
                 path = path.parent
