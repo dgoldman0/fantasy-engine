@@ -1221,7 +1221,11 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   LM1's `design/chiplet-module.md` holds the plan and its decisions. Stage
   1, the core model, is done (2026-11-22, LM1 64fc5c7): it agrees with the
   Python emulator on every test program, and the emulator was first
-  corrected where it departed from the spec.
+  corrected where it departed from the spec. Stage 2, the module with LM1's
+  end of the link, is done the same day (LM1 21614ef): MegaPad's emulator
+  and simulator attach it, boot an LM1 image from MegaPad's memory,
+  exchange doorbells with it, store into the memory it lends, and save and
+  restore it.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
@@ -1234,7 +1238,10 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
 - **8f. Toolchain.** The assembler and compiler follow any ISA changes. They
   build the Lisp runtime image that MegaPad loads.
 - **8g. Verification.** Link conformance tests are shared by the chiplet
-  module, the Python reference and both RTL sides. Managed data's tests,
+  module and both RTL sides. The Python reference has no end of the link,
+  and it retires once the module has replaced it. Done: the link's cases
+  form one list, LM1's `tb/link/link_cases.txt`, which the module and both
+  RTL benches run (2026-11-22). Managed data's tests,
   among them handles that survive a collection and writes from MegaPad, are
   listed in MegaPad's `docs/managed-data.md` §15; they run on the chiplet
   module and the RTL, since the Python reference does not implement managed
