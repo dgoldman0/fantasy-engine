@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
                                          runner.scratch / "r")
                 key = launch_key(launch.argv, launch.cwd, env, runner.python,
                                  runner.locations)
-                decision = decide(unit, key, store, runner.locations)
+                decision = decide(unit, key, store, runner.locations, runner.workspace)
                 if decision.skip:
                     why = runner.unchanged(decision.previous)
                 else:

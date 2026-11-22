@@ -1,15 +1,19 @@
 """Run test units one at a time, skipping those whose inputs haven't changed.
 
-For each unit the runner compares the inputs its latest passing run read
-with their current contents.  A unit runs again when there is no passing
-run, when its launch settings differ (its command, its folder, and the
-environment it receives, which takes from the caller only the variables
-that shape a result, while those that locate another checkout or a pinned
-tool are set by the unit's repository), when its last run started a program
-whose reads went unrecorded, or when any input has changed; otherwise it is
-reported as unchanged since that run.  A full run executes every unit and
-checks the selection: a unit the selection would have skipped that now gives
-a different result reveals an input the recording missed.
+For each unit the runner compares the inputs that each of its passing runs
+on record read with their current contents (the record keeps a pass for
+each workspace that ran the unit; see ``store``).  A unit is skipped when
+one of those passes matches: the same launch settings (its command, its
+folder, and the environment it receives, which takes from the caller only
+the variables that shape a result, while those that locate another
+checkout or a pinned tool are set by the unit's repository), no program
+started whose reads went unrecorded, and no input changed.  It is then
+reported as unchanged since that pass's run.  Otherwise it runs, and the
+report gives the reason that the most fitting pass failed to match: the
+pass from the run's own workspace when there is one, else the newest.  A
+full run executes every unit and checks the selection: a unit the
+selection would have skipped that now gives a different result reveals an
+input the recording missed.
 
 A unit can run and test nothing: pytest collects no test from a file that
 holds only a standalone driver, and the unit ends as empty.  The skip takes
@@ -67,7 +71,7 @@ from typing import TextIO
 
 from . import records
 from .recorder.fe_cases import PASSED_ENV, RESUME_ENV, SKIPPED_ENV
-from .store import ALL_SKIPPED, EMPTY, PASSING, Result, Store
+from .store import ALL_SKIPPED, EMPTY, PASSING, Result, Store, workspace_identity
 from .suites import LAUNCH_VARIABLES, Locations, Repo, Unit
 
 RECORDER_DIR = Path(__file__).resolve().parent / "recorder"
@@ -171,19 +175,29 @@ class Decision:
 
 
 def decide(unit: Unit, key: str, store: Store,
-           locations: Locations | None = None) -> Decision:
-    previous = store.latest_pass(unit.id)
-    if previous is None:
+           locations: Locations | None = None,
+           workspace: str | None = None) -> Decision:
+    """Skip UNIT when a pass on record matches its launch KEY and current
+    inputs.  The pass WORKSPACE recorded comes first, then the newest; when
+    none matches, the first of them gives the reason the unit runs."""
+    passes = store.passes(unit.id)
+    if not passes:
         return Decision(False, "no passing run on record")
-    if previous.launch_key != key:
-        return Decision(False, "its launch settings changed", previous)
-    unrecordable = previous.inputs.get("unrecordable") or []
-    if unrecordable:
-        return Decision(False, "it starts %s" % unrecordable[0], previous)
-    changed = store.changes(previous.inputs, limit=1, locations=locations)
-    if changed:
-        return Decision(False, "changed: %s" % changed[0], previous)
-    return Decision(True, "unchanged", previous)
+    passes.sort(key=lambda result: workspace is None or result.workspace != workspace)
+    first: Decision | None = None
+    for previous in passes:
+        unrecordable = previous.inputs.get("unrecordable") or []
+        if previous.launch_key != key:
+            decision = Decision(False, "its launch settings changed", previous)
+        elif unrecordable:
+            decision = Decision(False, "it starts %s" % unrecordable[0], previous)
+        else:
+            changed = store.changes(previous.inputs, limit=1, locations=locations)
+            if not changed:
+                return Decision(True, "unchanged", previous)
+            decision = Decision(False, "changed: %s" % changed[0], previous)
+        first = first or decision
+    return first
 
 
 @dataclass
@@ -210,6 +224,8 @@ class Runner:
         self.store = store
         self.repos = repos
         self.locations = Locations(repos)
+        # The repositories' folders, which keep their own passes in the record.
+        self.workspace = workspace_identity({repo.name: str(repo.root) for repo in repos})
         self.out = out
         self.python = python
         # Short names: pytest's temporary folders, and any Unix sockets in
@@ -257,7 +273,7 @@ class Runner:
         self.heads = repository_heads(self.repos)
         mode = "full" if full else "select"
         if not dry_run:
-            self.store.begin_run(run_id, mode, self.heads)
+            self.store.begin_run(run_id, mode, self.heads, self.workspace)
             self.prune_logs(keep=5)
         self.say("%s run %s over %d units; %s" % (
             "Dry" if dry_run else mode.capitalize(), run_id, len(units),
@@ -392,7 +408,7 @@ class Runner:
         if not dry_run:
             self.stop_orphan(partial)
         tool_folders = unit.repo.tool_folders(env)
-        decision = decide(unit, key, self.store, self.locations)
+        decision = decide(unit, key, self.store, self.locations, self.workspace)
         if decision.skip and not full:
             if not dry_run:
                 shutil.rmtree(partial, ignore_errors=True)

@@ -792,11 +792,130 @@ def test_another_checkout_skips_the_units_whose_files_are_the_same(
     assert ran == ["tests/test_a.py", "tests/test_d.py"]
     assert "changed: %s" % (other.root / "data" / "a.txt") in text
 
-    # The record now holds the copy's pass, and the first checkout's a.txt
-    # differs from the copy's.
+
+def test_each_checkout_keeps_its_own_pass(demo, store, tmp_path):
+    run(demo, store, tmp_path)
+    first = store.latest_pass("demo:tests/test_a.py").run_id
+    other = checkout_copy(demo, tmp_path)
+    (other.root / "data" / "a.txt").write_text("a2")
+    _, ran, _ = run(other, store, tmp_path)
+    assert ran == ["tests/test_a.py", "tests/test_d.py"]
+    second = store.latest_pass("demo:tests/test_a.py").run_id
+    assert [p.run_id for p in store.passes("demo:tests/test_a.py")] == [second, first]
+
+    # The pass on the copy's inputs stands beside the first checkout's, so
+    # each checkout's unit matches its own.
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py"]
+    assert "SKIP  demo:tests/test_a.py  unchanged since %s " % first in text
+    _, ran, text = run(other, store, tmp_path)
+    assert ran == ["tests/test_d.py"]
+    assert "SKIP  demo:tests/test_a.py  unchanged since %s " % second in text
+
+    # A checkout whose files match the other's pass is skipped on it.
+    (demo.root / "data" / "a.txt").write_text("a2")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py"]
+    assert "SKIP  demo:tests/test_a.py  unchanged since %s " % second in text
+
+
+def test_a_newer_pass_replaces_the_older_one_from_the_same_checkout(
+        demo, store, tmp_path):
+    run(demo, store, tmp_path)
+    (demo.root / "data" / "a.txt").write_text("a2")
+    _, ran, _ = run(demo, store, tmp_path)
+    assert ran == ["tests/test_a.py", "tests/test_d.py"]
+    assert len(store.passes("demo:tests/test_a.py")) == 1
+
+    # The pass that read "a" is gone, so a.txt going back to "a" runs the
+    # unit again.
+    (demo.root / "data" / "a.txt").write_text("a")
     _, ran, text = run(demo, store, tmp_path)
     assert ran == ["tests/test_a.py", "tests/test_d.py"]
     assert "changed: %s" % (demo.root / "data" / "a.txt") in text
+
+
+def test_a_retired_checkouts_pass_serves_until_the_unit_passes_again(
+        demo, store, tmp_path):
+    run(demo, store, tmp_path)
+    other = checkout_copy(demo, tmp_path)
+    (other.root / "data" / "a.txt").write_text("a2")
+    run(other, store, tmp_path)
+    copied = store.latest_pass("demo:tests/test_a.py").run_id
+    shutil.rmtree(other.root)
+
+    # The retired checkout's pass still serves a checkout that now holds
+    # its files, as main does after a branch merges unchanged...
+    (demo.root / "data" / "a.txt").write_text("a2")
+    _, ran, text = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py"]
+    assert "SKIP  demo:tests/test_a.py  unchanged since %s " % copied in text
+    assert len(store.passes("demo:tests/test_a.py")) == 2
+
+    # ...until the unit passes again anywhere.  The new pass also replaces
+    # the first checkout's older one.
+    summary, _, _ = run(demo, store, tmp_path, full=True)
+    [kept] = store.passes("demo:tests/test_a.py")
+    assert kept.run_id != copied and kept.workspace is not None
+    assert not summary.missed
+
+
+def test_a_failure_in_one_checkout_leaves_the_others_pass_in_place(
+        demo, store, tmp_path):
+    run(demo, store, tmp_path)
+    other = checkout_copy(demo, tmp_path)
+    (other.root / "data" / "b.txt").write_text("broken")
+    summary, _, _ = run(other, store, tmp_path)
+    assert summary.failed == ["demo:tests/test_b.py"]
+    assert store.latest("demo:tests/test_b.py").outcome == "failed"
+    assert store.latest_pass("demo:tests/test_b.py") is not None
+
+    # The first checkout's pass still serves it, while the copy runs it
+    # until it passes again.
+    _, ran, _ = run(demo, store, tmp_path)
+    assert ran == ["tests/test_d.py"]
+    summary, ran, _ = run(other, store, tmp_path)
+    assert ran == ["tests/test_b.py", "tests/test_d.py"]
+    assert summary.failed == ["demo:tests/test_b.py"]
+    # Only the latest failure stays on record beside the passes.
+    outcomes = [row[0] for row in store.db.execute(
+        "SELECT outcome FROM results WHERE unit = 'demo:tests/test_b.py'")]
+    assert sorted(outcomes) == ["failed", "passed"]
+
+    (other.root / "data" / "b.txt").write_text("b")
+    _, ran, _ = run(other, store, tmp_path)
+    assert ran == ["tests/test_d.py"]
+
+
+def test_a_record_from_before_workspaces_were_named_still_serves(tmp_path, demo):
+    import sqlite3
+
+    # A record as the store wrote it before runs named their workspace.
+    path = tmp_path / "old" / "records.sqlite3"
+    path.parent.mkdir()
+    old = sqlite3.connect(path)
+    old.executescript("""
+        CREATE TABLE runs (run_id TEXT PRIMARY KEY, started REAL NOT NULL,
+                           finished REAL, mode TEXT NOT NULL, heads TEXT NOT NULL);
+    """)
+    old.commit()
+    old.close()
+    store = Store(path)
+    try:
+        run(demo, store, tmp_path)
+        store.db.execute("UPDATE runs SET workspace = NULL")
+        store.db.commit()
+        summary, ran, _ = run(demo, store, tmp_path)
+        assert ran == ["tests/test_d.py"]
+        assert summary.skipped == len(TESTS) - 1
+
+        # The unit's next pass drops the pass whose workspace is unknown.
+        (demo.root / "data" / "a.txt").write_text("a2")
+        run(demo, store, tmp_path)
+        [kept] = store.passes("demo:tests/test_a.py")
+        assert kept.workspace is not None
+    finally:
+        store.close()
 
 
 def test_an_interrupted_unit_resumes_only_in_its_own_checkout(

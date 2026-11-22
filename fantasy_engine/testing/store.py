@@ -1,11 +1,37 @@
 """The record of test runs, and digests of the inputs they read.
 
-One SQLite file holds every run's metadata, the latest result of each unit
-together with the inputs that run read, and a cache of file digests keyed by
-each file's identity (device, inode, size, modification and change times),
-so a file is hashed again only after it changes.  A unit's inputs name a
-file inside a repository by the repository (``suites.Locations``), so the
-record serves every checkout of the same repositories.
+One SQLite file holds every run's metadata, the passes of each unit that
+the record keeps together with the inputs each of those runs read, the
+unit's latest result when that was no pass, and a cache of file digests
+keyed by each file's identity (device, inode, size, modification and change
+times), so a file is hashed again only after it changes.  A unit's inputs
+name a file inside a repository by the repository (``suites.Locations``), so
+the record serves every checkout of the same repositories.
+
+Several checkouts share the record, and each holds its own state of the
+repositories: a branch's worktree may build MegaPad's native libraries from
+other sources than main's.  A unit's passes are therefore kept per
+workspace, the set of repository folders a run used, and a unit is skipped
+when its current inputs match any pass on record.  Which passes stay is
+decided whenever a unit passes (``Store.record``):
+
+- A workspace keeps only its newest pass of each unit.  An older pass from
+  the same workspace describes a state that workspace has left, and would
+  serve again only if its files returned to exactly that state.
+- A pass from a workspace whose folders no longer exist, or from a run that
+  named no workspace, as runs did before workspaces were recorded, is kept
+  until the unit passes again anywhere.  Until then it still serves any
+  checkout that holds the same files, as main does after a branch merges
+  without further change; once the unit has passed again, the checkout that
+  now holds those files has recorded its own pass.
+- A result that is no pass is kept only while it is the unit's latest
+  result, so it keeps its meaning for reports, and it never stands for a
+  pass.
+
+A unit thus holds at most one pass for each workspace that existed when the
+unit last passed.  An age limit would instead drop passes that a live
+workspace still relies on, such as main's for units that go weeks without
+changing, or keep a retired workspace's passes for the whole period.
 """
 
 from __future__ import annotations
@@ -29,7 +55,8 @@ CREATE TABLE IF NOT EXISTS runs (
     started REAL NOT NULL,
     finished REAL,
     mode TEXT NOT NULL,
-    heads TEXT NOT NULL
+    heads TEXT NOT NULL,
+    workspace TEXT
 );
 CREATE TABLE IF NOT EXISTS results (
     unit TEXT NOT NULL,
@@ -83,6 +110,9 @@ class Result:
     launch_key: str
     inputs: dict
     note: str
+    # The workspace of the run that recorded it (``workspace_identity``),
+    # as the record reads it back; None for a run that named none.
+    workspace: str | None = None
 
     @property
     def ran_nothing(self) -> bool:
@@ -91,6 +121,30 @@ class Result:
     @property
     def all_skipped(self) -> bool:
         return self.outcome == ALL_SKIPPED
+
+    @property
+    def passing(self) -> bool:
+        return self.outcome in PASSING
+
+
+def workspace_identity(roots: dict[str, str]) -> str:
+    """The workspace that ROOTS, each repository's folder by its name, make
+    up: every folder as it resolves, so a workspace whose folders link to
+    main's checkouts is main's workspace."""
+    return json.dumps({name: os.path.realpath(root) for name, root in roots.items()},
+                      sort_keys=True)
+
+
+def workspace_exists(workspace: str | None) -> bool:
+    """Whether every folder of WORKSPACE is still there; False for a run
+    that named no workspace."""
+    if not workspace:
+        return False
+    try:
+        folders = json.loads(workspace)
+    except ValueError:
+        return False
+    return bool(folders) and all(os.path.isdir(folder) for folder in folders.values())
 
 
 @dataclass
@@ -125,8 +179,24 @@ class Store:
         self.db = sqlite3.connect(self.path)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(_SCHEMA)
+        self._add_workspace_column()
         self._digests: dict[str, tuple[str, str]] = {}
         self._new_digests: dict[str, tuple[str, str]] = {}
+
+    def _add_workspace_column(self) -> None:
+        """A record made before runs named their workspace gains the column;
+        its runs keep none, so their passes count as a retired workspace's."""
+        columns = {row[1] for row in self.db.execute("PRAGMA table_info(runs)")}
+        if "workspace" in columns:
+            return
+        try:
+            with self.db:
+                self.db.execute("ALTER TABLE runs ADD COLUMN workspace TEXT")
+        except sqlite3.OperationalError:
+            # Another process opening the record added it first.
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(runs)")}
+            if "workspace" not in columns:
+                raise
 
     def close(self) -> None:
         self.flush_digests()
@@ -266,11 +336,13 @@ class Store:
 
     # -- runs and results --------------------------------------------------
 
-    def begin_run(self, run_id: str, mode: str, heads: dict) -> None:
+    def begin_run(self, run_id: str, mode: str, heads: dict,
+                  workspace: str | None = None) -> None:
         with self.db:
             self.db.execute(
-                "INSERT INTO runs (run_id, started, mode, heads) VALUES (?, ?, ?, ?)",
-                (run_id, time.time(), mode, json.dumps(heads, sort_keys=True)),
+                "INSERT INTO runs (run_id, started, mode, heads, workspace) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (run_id, time.time(), mode, json.dumps(heads, sort_keys=True), workspace),
             )
 
     def finish_run(self, run_id: str) -> None:
@@ -280,16 +352,20 @@ class Store:
 
     def run_info(self, run_id: str) -> dict | None:
         row = self.db.execute(
-            "SELECT started, finished, mode, heads FROM runs WHERE run_id = ?",
+            "SELECT started, finished, mode, heads, workspace FROM runs WHERE run_id = ?",
             (run_id,),
         ).fetchone()
         if row is None:
             return None
         return {"started": row[0], "finished": row[1], "mode": row[2],
-                "heads": json.loads(row[3])}
+                "heads": json.loads(row[3]), "workspace": row[4]}
 
     def record(self, result: Result) -> None:
-        """Keep RESULT, the unit's latest pass and nothing older."""
+        """Keep RESULT, and drop what it supersedes (see the module's notes):
+        after a pass, the unit's older passes from the same workspace, its
+        older passes from workspaces that no longer exist or were never
+        named, and any older result that is no pass; after any other
+        result, the older results that are no pass."""
 
         blob = zlib.compress(json.dumps(result.inputs, sort_keys=True).encode(), 6)
         with self.db:
@@ -299,37 +375,65 @@ class Store:
                 (result.unit, result.run_id, result.outcome, result.duration,
                  result.finished, result.launch_key, blob, result.note),
             )
-            keep = {result.run_id}
-            latest_pass = self._latest(result.unit, passing=True)
-            if latest_pass is not None:
-                keep.add(latest_pass.run_id)
-            marks = ",".join("?" * len(keep))
-            self.db.execute(
-                "DELETE FROM results WHERE unit = ? AND run_id NOT IN (%s)" % marks,
-                (result.unit, *sorted(keep)),
-            )
+            rows = self.db.execute(
+                "SELECT results.run_id, results.outcome, results.finished, runs.workspace "
+                "FROM results LEFT JOIN runs ON runs.run_id = results.run_id "
+                "WHERE results.unit = ? AND results.run_id != ?",
+                (result.unit, result.run_id),
+            ).fetchall()
+            workspace = None
+            if result.passing:
+                info = self.run_info(result.run_id)
+                workspace = info["workspace"] if info is not None else None
+            dropped = []
+            for run_id, outcome, finished, kept_workspace in rows:
+                if finished > result.finished:
+                    continue  # newer than RESULT, so nothing RESULT supersedes
+                if outcome not in PASSING:
+                    dropped.append(run_id)
+                elif not result.passing:
+                    continue
+                elif workspace is not None and kept_workspace == workspace:
+                    dropped.append(run_id)
+                elif not workspace_exists(kept_workspace):
+                    dropped.append(run_id)
+            if dropped:
+                marks = ",".join("?" * len(dropped))
+                self.db.execute(
+                    "DELETE FROM results WHERE unit = ? AND run_id IN (%s)" % marks,
+                    (result.unit, *dropped),
+                )
         self.flush_digests()
 
-    def _latest(self, unit: str, passing: bool) -> Result | None:
-        query = (
-            "SELECT unit, run_id, outcome, duration, finished, launch_key, inputs, note "
-            "FROM results WHERE unit = ?"
-        )
+    _COLUMNS = ("results.unit, results.run_id, results.outcome, results.duration, "
+                "results.finished, results.launch_key, results.inputs, results.note, "
+                "runs.workspace")
+
+    def _results(self, unit: str, passing: bool, limit: int | None = None) -> list[Result]:
+        query = ("SELECT %s FROM results LEFT JOIN runs ON runs.run_id = results.run_id "
+                 "WHERE results.unit = ?" % self._COLUMNS)
+        params: tuple = (unit,)
         if passing:
-            query += " AND outcome IN (%s)" % ",".join("?" * len(PASSING))
-        query += " ORDER BY finished DESC LIMIT 1"
-        params = (unit, *PASSING) if passing else (unit,)
-        row = self.db.execute(query, params).fetchone()
-        if row is None:
-            return None
-        inputs = json.loads(zlib.decompress(row[6]))
-        return Result(row[0], row[1], row[2], row[3], row[4], row[5], inputs, row[7])
+            query += " AND results.outcome IN (%s)" % ",".join("?" * len(PASSING))
+            params += PASSING
+        query += " ORDER BY results.finished DESC"
+        if limit is not None:
+            query += " LIMIT %d" % limit
+        return [Result(row[0], row[1], row[2], row[3], row[4], row[5],
+                       json.loads(zlib.decompress(row[6])), row[7], row[8])
+                for row in self.db.execute(query, params)]
+
+    def passes(self, unit: str) -> list[Result]:
+        """Every pass of UNIT the record keeps, the newest first."""
+        return self._results(unit, passing=True)
 
     def latest_pass(self, unit: str) -> Result | None:
-        return self._latest(unit, passing=True)
+        found = self._results(unit, passing=True, limit=1)
+        return found[0] if found else None
 
     def latest(self, unit: str) -> Result | None:
-        return self._latest(unit, passing=False)
+        found = self._results(unit, passing=False, limit=1)
+        return found[0] if found else None
 
     def latest_outcomes(self) -> dict[str, str]:
         """Each recorded unit's latest outcome, read without its inputs."""
