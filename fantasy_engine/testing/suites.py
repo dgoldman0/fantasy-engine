@@ -373,6 +373,21 @@ class LM1Repo(Repo):
     def emu(self) -> Path:
         return self.root / "emu"
 
+    @property
+    def chiplet(self) -> Path:
+        return self.root / "chiplet"
+
+    def prepare(self, env: dict[str, str]) -> None:
+        # The chiplet module's library, which LM1's chiplet batches load.
+        # LM1's binding builds it itself whenever its sources' digest differs
+        # from the library's, but a unit that starts make cannot be skipped
+        # at the next run, so the library is built before any unit is
+        # decided.  make rebuilds it only when a source is newer, so a
+        # current build costs nothing.
+        if (self.chiplet / "Makefile").is_file():
+            subprocess.run(["make", "--no-print-directory", "-C", str(self.chiplet)],
+                           env=env, check=True, stdout=subprocess.DEVNULL)
+
     def units(self) -> list[Unit]:
         listed = subprocess.run(
             [sys.executable, "-m", "lm1.testing.runner", "--test-dir", "tests", "list"],

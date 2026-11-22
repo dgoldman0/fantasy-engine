@@ -918,3 +918,23 @@ def test_megapad_prepare_builds_the_simulator_library_its_makefile_names(tmp_pat
     (without / "Makefile").write_text("accel:\n\t@true\n")
     MegaPadRepo(without).prepare(dict(os.environ))
     assert sorted(p.name for p in without.iterdir()) == ["Makefile"]
+
+
+def test_lm1_prepare_builds_the_chiplet_library(tmp_path):
+    from fantasy_engine.testing.suites import LM1Repo
+
+    with_chiplet = tmp_path / "with"
+    chiplet = with_chiplet / "chiplet"
+    chiplet.mkdir(parents=True)
+    (chiplet / "Makefile").write_text(
+        "all: build/lib.so\n"
+        "build/lib.so: source.cpp\n\t@mkdir -p build\n\t@cp source.cpp $@\n")
+    (chiplet / "source.cpp").write_text("one\n")
+    LM1Repo(with_chiplet).prepare(dict(os.environ))
+    assert (chiplet / "build" / "lib.so").read_text() == "one\n"
+
+    # A checkout without the chiplet module builds nothing.
+    without = tmp_path / "without"
+    without.mkdir()
+    LM1Repo(without).prepare(dict(os.environ))
+    assert list(without.iterdir()) == []
