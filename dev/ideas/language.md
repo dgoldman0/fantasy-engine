@@ -107,8 +107,13 @@ and closing the owner releases them.
 | `struct` | A record in plain memory: the address of its fields, managed by hand |
 
 `record`, `string`, `vector` and `bytes` refine `ref`, and every reference
-kind refines `tagged`. A handle is neither a reference nor an address, and
-the checker keeps the three apart.
+kind refines `tagged`, as `list` does, since nil and a reference to a cons
+cell are both tagged words. A parametric kind refines the same form of what
+its parameter refines, so `list( concept )` refines `list( record )` and
+`handle( concept )` refines `handle( record )`. A list's elements are of a
+kind that rests on `tagged`, or flags or characters, and a handle names an
+object of a reference kind or a list. A handle is neither a reference nor
+an address, and the checker keeps the three apart.
 
 `record` now names collected records, as decision 31 does, and Akashic's
 records in plain memory, which the first checker round called records,
@@ -116,10 +121,10 @@ become `struct`. Two things recommend the name. Forth 2012 calls such
 layouts structures, with `BEGIN-STRUCTURE`, `FIELD:` and `END-STRUCTURE`,
 and C's `struct` is the same idea, so programmers coming from either read
 it correctly. And the language then has one word for each side of decision
-28: records are collected, structs are managed by hand. The rename touches
-two declarations in Akashic's Forth, `net/io-port.f` and
-`net/transports/kdos-tls-port.f`, besides the checker's own tables, tests
-and notes. `ref` and `handle` keep the meanings the first round gave them.
+28: records are collected, structs are managed by hand. Akashic's Forth
+declares two struct kinds so far, the NIO port in `net/io-port.f` and the
+KDOS TLS port in `net/transports/kdos-tls-port.f`. `ref` and `handle` keep
+the meanings the first round gave them.
 
 ### Record kinds
 
@@ -375,12 +380,15 @@ whole (decision 30). They are worth reading before the design goes further.
   closure. MegaPad compiles each word with the BIOS's compiler, which
   already turns every Forth definition into native code as it is compiled,
   so `uroko.f` adds checking and Uroko's forms above it and no second code
-  generator. LM1
-  compiles a word from its list form, in Lisp, when a task that uses it
-  arrives there. The image builder runs the same module in the simulator
-  during a build, as it already boots each image once to record token
-  forms, so there is one compiler, written in Forth. The host prototype
-  stays a measuring tool. Whether running lists a program builds as it
+  generator. The module exists so far with the base words' declarations
+  alone, one `EFFECT COMPARE ( s1: span s2: span -- n: n )` line to a
+  word, which the host prototype reads; `EFFECT` parses the name and
+  records nothing yet, and the checker on the machine will give it the body
+  that keeps each effect for the word it names. LM1 compiles a word from
+  its list form, in Lisp, when a task that uses it arrives there. The image
+  builder runs the same module in the simulator during a build, as it
+  already boots each image once to record token forms, so there is one
+  compiler, written in Forth. The host prototype stays a measuring tool. Whether running lists a program builds as it
   runs joins the release is still open (decision 32 puts it after).
 - **What a word is as a value.** Lists hold words themselves, not their
   names (decision 34), so a word needs an object form that every engine can
