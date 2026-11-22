@@ -938,3 +938,85 @@ def test_lm1_prepare_builds_the_chiplet_library(tmp_path):
     without.mkdir()
     LM1Repo(without).prepare(dict(os.environ))
     assert list(without.iterdir()) == []
+
+
+def _workspace_with_megapad_and_lm1(tmp_path):
+    """MegaPad and LM1 checkouts side by side: MegaPad's Makefile names its
+    pytest settings, and LM1's chiplet Makefile writes the MEGAPAD_ROOT it
+    was given into the library it builds."""
+    workspace = tmp_path / "ws"
+    megapad, lm1 = workspace / "megapad", workspace / "lm1"
+    megapad.mkdir(parents=True)
+    (megapad / "Makefile").write_text("PYTEST_CONFIG_ARGS := -q\naccel:\n\t@true\n")
+    (lm1 / "chiplet").mkdir(parents=True)
+    (lm1 / "chiplet" / "Makefile").write_text(
+        "all:\n\t@mkdir -p build\n\t@echo \"$(MEGAPAD_ROOT)\" > build/lib.so\n")
+    return workspace, megapad, lm1
+
+
+def test_megapads_tests_of_lm1_find_the_workspaces_lm1(tmp_path, store, monkeypatch):
+    from fantasy_engine.testing.suites import LM1Repo, MegaPadRepo, repositories
+
+    workspace, megapad, lm1 = _workspace_with_megapad_and_lm1(tmp_path)
+    repos = repositories(workspace)
+    mp, lm1_repo = repos
+    assert isinstance(mp, MegaPadRepo) and isinstance(lm1_repo, LM1Repo)
+    assert mp.lm1 is lm1_repo and lm1_repo.megapad_root == megapad
+
+    monkeypatch.delenv("LM1_ROOT", raising=False)
+    runner = Runner(store, repos=repos, out=io.StringIO(), scratch=tmp_path / "scratch",
+                    partial_root=tmp_path / "partial")
+
+    def launched(name):
+        launch = mp.launch(Unit(mp, name), runner.python)
+        env = runner.environment(launch, tmp_path / "t", tmp_path / "r")
+        return env, launch_key(launch.argv, launch.cwd, env, runner.python, runner.locations)
+
+    env, lm1_key = launched("tests/test_lm1_chiplet.py")
+    assert env["LM1_ROOT"] == str(lm1)
+    env, other_key = launched("tests/test_system.py")
+    assert "LM1_ROOT" not in env, "only the tests of LM1 depend on where it lies"
+    assert mp.notes(os.environ) == []
+
+    # A caller's LM1_ROOT reaches no unit and splits no record; the run says
+    # which LM1 the tests used.
+    monkeypatch.setenv("LM1_ROOT", str(tmp_path / "another-lm1"))
+    env, key = launched("tests/test_lm1_chiplet.py")
+    assert env["LM1_ROOT"] == str(lm1) and key == lm1_key
+    env, key = launched("tests/test_system.py")
+    assert "LM1_ROOT" not in env and key == other_key
+    [note] = mp.notes(os.environ)
+    assert "another-lm1" in note and str(lm1) in note
+
+    # Without LM1 in the workspace no unit is told of one.
+    shutil.rmtree(lm1)
+    [alone] = repositories(workspace)
+    assert alone.lm1 is None
+    launch = alone.launch(Unit(alone, "tests/test_lm1_chiplet.py"), runner.python)
+    assert "LM1_ROOT" not in launch.env
+
+
+def test_lm1_builds_and_runs_against_the_workspaces_megapad(tmp_path, store, monkeypatch):
+    from fantasy_engine.testing.runner import _base_environment
+    from fantasy_engine.testing.suites import repositories
+
+    workspace, megapad, lm1 = _workspace_with_megapad_and_lm1(tmp_path)
+    mp, lm1_repo = repositories(workspace)
+    monkeypatch.setenv("MEGAPAD_ROOT", str(tmp_path / "another-megapad"))
+    runner = Runner(store, repos=[mp, lm1_repo], out=io.StringIO(),
+                    scratch=tmp_path / "scratch", partial_root=tmp_path / "partial")
+    launch = lm1_repo.launch(Unit(lm1_repo, "chiplet_link"), runner.python)
+    env = runner.environment(launch, tmp_path / "t", tmp_path / "r")
+    assert env["MEGAPAD_ROOT"] == str(megapad)
+    [note] = lm1_repo.notes(os.environ)
+    assert "another-megapad" in note and str(megapad) in note
+
+    # The build is given the workspace's MegaPad, as the units are, however
+    # the caller's environment names another.
+    library = lm1 / "chiplet" / "build" / "lib.so"
+    lm1_repo.prepare(_base_environment())
+    assert library.read_text() == "%s\n" % megapad
+    # MegaPad's own preparation builds the library too, for its tests of LM1.
+    library.unlink()
+    mp.prepare(_base_environment())
+    assert library.read_text() == "%s\n" % megapad

@@ -23,7 +23,7 @@ FANTASY_ENGINE_ROOT = Path(__file__).resolve().parents[2]
 # passes no caller's value for them, so whether a caller exported them
 # cannot split the record.  A unit that does not read them never sees them,
 # and one that does gets the same value from every caller in a workspace.
-LAUNCH_VARIABLES = frozenset(("MEGAPAD_ROOT", "AKASHIC_E2FSPROGS_TOOL_DIR",
+LAUNCH_VARIABLES = frozenset(("MEGAPAD_ROOT", "LM1_ROOT", "AKASHIC_E2FSPROGS_TOOL_DIR",
                               "AKASHIC_EXT4_BACKEND"))
 
 # Units for what the first release leaves out (decision 35): Sound Lab,
@@ -309,13 +309,21 @@ class MegaPadRepo(Repo):
     has seen, about 1 MB here, so each unit passes the Makefile's own pytest
     settings back with that plugin turned off, and with fe_cases, which
     records each passing test so that an interrupted unit resumes.
+
+    MegaPad's tests of LM1 behind a chiplet port, the files named
+    test_lm1*.py, attach the library LM1's chiplet module builds.  They find
+    LM1 through LM1_ROOT, which names the workspace's LM1 for them alone, so
+    no other unit's launch depends on where LM1 lies; and the library is
+    built before any unit is decided, as for LM1's own units.
     """
 
     name = "megapad"
+    LM1_TESTS = "test_lm1"
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, lm1: "LM1Repo | None" = None):
         super().__init__(root)
         self._pytest_settings: str | None = None
+        self.lm1 = lm1
 
     def make_variable(self, name: str) -> str:
         """The value the Makefile gives NAME, empty when it gives none."""
@@ -345,29 +353,55 @@ class MegaPadRepo(Repo):
         if library:
             subprocess.run(["make", "--no-print-directory", library], cwd=self.root,
                            env=env, check=True, stdout=subprocess.DEVNULL)
+        if self.lm1 is not None:
+            self.lm1.build_chiplet(env)
 
     def units(self) -> list[Unit]:
         names = self.tracked("tests/*test_*.py")
         return [Unit(self, n) for n in names
                 if os.path.basename(n).startswith("test_")]
 
+    def attaches_lm1(self, unit: Unit) -> bool:
+        return os.path.basename(unit.name).startswith(self.LM1_TESTS)
+
     def launch(self, unit: Unit, python: str) -> Launch:
-        return Launch(
+        launch = Launch(
             argv=["make", "--no-print-directory", "-o", "accel", "test-sequential",
                   "TEST_PATH=%s" % unit.name,
                   "PYTEST_CONFIG_ARGS=%s" % self.pytest_settings()],
             cwd=self.root,
             launcher_inputs=[self.root / "Makefile"],
         )
+        if self.lm1 is not None and self.attaches_lm1(unit):
+            launch.env["LM1_ROOT"] = str(self.lm1.root)
+        return launch
+
+    def notes(self, environ) -> list[str]:
+        named = environ.get("LM1_ROOT")
+        if self.lm1 is not None and named and \
+                Path(named).resolve() != self.lm1.root.resolve():
+            return ["LM1_ROOT names %s, but MegaPad's tests of LM1 use the "
+                    "workspace's LM1, %s; --workspace chooses another"
+                    % (named, self.lm1.root)]
+        return []
 
 
 _LM1_BATCH = re.compile(r"^\s*\[([^\]]+)\] \(\d+ tests?\)")
 
 
 class LM1Repo(Repo):
-    """LM1's emulator tests run in named batches through LM1's own runner."""
+    """LM1's emulator tests run in named batches through LM1's own runner.
+
+    LM1's chiplet module builds against MegaPad's chiplet_module.h, which it
+    finds, as LM1's link bench does, through MEGAPAD_ROOT: for LM1's units
+    and its build, always the workspace's MegaPad.
+    """
 
     name = "lm1"
+
+    def __init__(self, root: Path, megapad_root: Path | None = None):
+        super().__init__(root)
+        self.megapad_root = Path(megapad_root) if megapad_root is not None else None
 
     @property
     def emu(self) -> Path:
@@ -377,16 +411,31 @@ class LM1Repo(Repo):
     def chiplet(self) -> Path:
         return self.root / "chiplet"
 
-    def prepare(self, env: dict[str, str]) -> None:
-        # The chiplet module's library, which LM1's chiplet batches load.
-        # LM1's binding builds it itself whenever its sources' digest differs
-        # from the library's, but a unit that starts make cannot be skipped
-        # at the next run, so the library is built before any unit is
-        # decided.  make rebuilds it only when a source is newer, so a
-        # current build costs nothing.
+    def build_chiplet(self, env: dict[str, str]) -> None:
+        # The chiplet module's library, which LM1's chiplet batches and
+        # MegaPad's tests of LM1 load.  LM1's binding builds it itself
+        # whenever its sources' digest differs from the library's, but a
+        # unit that starts make cannot be skipped at the next run, so the
+        # library is built before any unit is decided.  make rebuilds it
+        # only when a source is newer, so a current build costs nothing.
         if (self.chiplet / "Makefile").is_file():
+            env = dict(env)
+            if self.megapad_root is not None:
+                env["MEGAPAD_ROOT"] = str(self.megapad_root)
             subprocess.run(["make", "--no-print-directory", "-C", str(self.chiplet)],
                            env=env, check=True, stdout=subprocess.DEVNULL)
+
+    def prepare(self, env: dict[str, str]) -> None:
+        self.build_chiplet(env)
+
+    def notes(self, environ) -> list[str]:
+        named = environ.get("MEGAPAD_ROOT")
+        if self.megapad_root is not None and named and \
+                Path(named).resolve() != self.megapad_root.resolve():
+            return ["MEGAPAD_ROOT names %s, but LM1's chiplet module builds against "
+                    "the workspace's MegaPad, %s; --workspace chooses another"
+                    % (named, self.megapad_root)]
+        return []
 
     def units(self) -> list[Unit]:
         listed = subprocess.run(
@@ -398,11 +447,14 @@ class LM1Repo(Repo):
         return [Unit(self, name) for name in batches]
 
     def launch(self, unit: Unit, python: str) -> Launch:
-        return Launch(
+        launch = Launch(
             argv=[python, "-m", "lm1.testing.runner", "--test-dir", "tests",
                   "run", "--batch", unit.name],
             cwd=self.emu,
         )
+        if self.megapad_root is not None:
+            launch.env["MEGAPAD_ROOT"] = str(self.megapad_root)
+        return launch
 
 
 def workspace_root() -> Path:
@@ -415,10 +467,11 @@ def repositories(root: Path | None = None) -> list[Repo]:
 
     root = Path(root) if root is not None else workspace_root()
     megapad = root / "megapad"
+    lm1 = LM1Repo(root / "lm1", megapad if megapad.is_dir() else None)
     repos: list[Repo] = [
-        MegaPadRepo(megapad),
+        MegaPadRepo(megapad, lm1 if lm1.present() else None),
         AkashicRepo(root / "akashic", megapad),
-        LM1Repo(root / "lm1"),
+        lm1,
         FantasyEngineRepo(FANTASY_ENGINE_ROOT if root == FANTASY_ENGINE_ROOT.parent
                           else root / "fantasy-engine"),
     ]
