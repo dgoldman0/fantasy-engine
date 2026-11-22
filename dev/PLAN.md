@@ -915,7 +915,8 @@ themselves, as standard ext4 promises whoever moves the medium to a PC.
 
 ### Part 3. The simulator: multicore and chiplet modules
 
-One of the three leading items. Steps 3a to 3d are decided.
+One of the three leading items. Steps 3a to 3d are decided, and MegaPad's
+`docs/multicore-simulator-plan.md` stages the work (accepted 2026-11-22).
 
 Goal: the native simulator runs MegaPad as the multicore machine it is, and
 loads chiplets such as LM1 as modules.
@@ -938,14 +939,23 @@ registers where microcores are specified with 32, and boot sets up no
 microcore stacks.
 
 - **3a. Multicore model.** The simulator models every full core, and then
-  the clusters and their microcores. Its guest-visible results match the
-  emulator's lock-step: host scheduling never picks a winner. Its contract
-  (`docs/simulator-contract.md`) moves from one core to the full topology
-  and the deterministic scheduler that contract already describes as the
-  target.
+  the clusters and their microcores. Its cores take turns under a round
+  scheduler of its own, so host scheduling never picks a winner. Because
+  the simulator runs Forth semantically rather than MP64 instructions, it
+  cannot reproduce the emulator's interleaving of cores that race, and
+  matching the emulator's lock-step means three things (Decided
+  2026-11-22): a run's results depend only on its inputs; every run is an
+  interleaving the architecture allows; and wherever a program's
+  synchronization fixes the outcome, the results equal the emulator's on
+  one, two and four full cores. Its contract (`docs/simulator-contract.md`)
+  moves from one core to the full topology, and the BIOS's cooperative task
+  slots, the scheduler that contract names as its target, are built as
+  well. Boot gives each full core its stacks from its core ID, which today
+  only the emulator's host-side boot does.
 - **3b. Parallel speed.** Speculative rounds land as a separately reviewed
   optimization, with one-, two- and four-lane differential evidence, as the
-  parallel simulation plan requires.
+  parallel simulation plan requires. They serve the simulator first
+  (Decided 2026-11-22).
 - **3c. Attaching devices.** A general way to attach devices replaces the
   hard-coded windows, so new hardware doesn't need simulator surgery.
 - **3d. Chiplet modules** (Decided). The simulator imports a chiplet's model
@@ -964,9 +974,15 @@ microcore stacks.
   bits as the full core does, and boot gives microcores their stacks. A test
   runs R16 to R31 on a microcore in both the RTL and the emulator.
 - **3f. The tile engine's accumulator** (Decided 2026-11-20). The simulator
-  implements the full-width TACC family, which it marks unsupported today,
-  with the emulator's results, and `TACC.STORE`'s route into a chiplet's
-  window, since borrowed tile work (decision 38) runs on it.
+  implements the full-width TACC family with the emulator's results, and
+  `TACC.STORE`'s route into a chiplet's window, since borrowed tile work
+  (decision 38) runs on it. Done for one core on 2026-11-20 (MegaPad
+  4b07a41c and 39e8628b); each core's own accumulator follows 3a.
+- **3g. Microcore kernels** (Decided 2026-11-22). Microcores run kernel
+  words, and a simulator that runs Forth semantically can run nothing else
+  on them, so a design round settles the kernel contract before clusters
+  and microcores are simulated. `docs/microcore-kernels-plan.md` holds the
+  direction.
 
 Done when:
 
