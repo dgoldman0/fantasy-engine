@@ -490,9 +490,11 @@ updated for the work done since.
   NVMe, 100 GbE and an on-die display engine. It defines no link to MegaPad.
   It contradicts itself on the SRAM total (§3.1) and on the cluster count in
   its floorplan (§12.1).
-- The emulator has 177 tests in its own harness, and all of them pass
-  (Part 8a).
-- 41 RTL tests run on Verilator against a single core; the tile, cluster and
+- The emulator has 188 tests in its own harness, and all of them pass
+  (Part 8a). The C++ core model of Part 8d runs their programs, the RTL's
+  bench programs and 960 seeded instruction streams, and agrees with the
+  emulator on each, in 279 tests of its own.
+- 43 RTL tests run on Verilator against a single core; the tile, cluster and
   GC-engine RTL is not simulated. The FPGA flow stops at synthesis, at about
   90K LUTs for one 8-tile cluster.
 
@@ -1216,7 +1218,10 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   beside the module and the 27 conformance tests run through both. Until
   LM1's Lisp runtime serves the shared heap, the module stands in for it
   natively, and it models the moving work as the movement engines of 8b.
-  LM1's `design/chiplet-module.md` holds the plan and its decisions.
+  LM1's `design/chiplet-module.md` holds the plan and its decisions. Stage
+  1, the core model, is done (2026-11-22, LM1 64fc5c7): it agrees with the
+  Python emulator on every test program, and the emulator was first
+  corrected where it departed from the spec.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
