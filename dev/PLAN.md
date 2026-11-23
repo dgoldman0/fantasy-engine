@@ -463,8 +463,9 @@ updated for the work done since.
   Forth console applet.
 - Only the test harness builds images: `local_testing/akashic_tui.py`
   (37,370 lines, 160 profiles). A profile's roots expand to their REQUIRE
-  closure. Large closures are packed into chunk files of up to 120 KiB,
-  because MP64FS can't hold one file per module.
+  closure. The default build puts each module, in token form, on the ext4
+  system volume. The linked source build (`--linked`) packs large closures
+  into chunk files of up to 120 KiB on the MP64FS boot volume.
 - The canonical profiles are test setups. The Agent uses a scripted
   provider, and Streams reads recorded fixtures.
 - The runtime keeps one Practice head per system. A head holds identity,
@@ -474,9 +475,9 @@ updated for the work done since.
   opens. Development images enroll a blank Practice, which the harness README
   calls "not secure Practice enrollment".
 - The filesystem bindings are MP64FS (read and write), FAT (read-only) and
-  ext4 (read-only, plus a staged write mode labelled a
-  "controlled/trusted-local preview", limited to 1 KiB blocks and 256-byte
-  inodes). The image builder and the boot path use MP64FS only.
+  ext4 (read and write, within what Part 2 covers). The BIOS boots KDOS
+  from an MP64FS boot volume, and the Desktop then mounts its ext4 system
+  volume, read-only, and its ext4 user volume.
 - The 543 test files all live in `local_testing/`. The harness reads
   `bios.asm` and `kdos.f` from the MegaPad checkout beside it, and some
   tests start `megapad.py` as a separate process.
@@ -664,12 +665,12 @@ it. The tool lives in this repository, as the first piece of the
 5. Let the record fill as units run in ordinary work. The selection can
    judge a unit only after its first run through the tool, so until then a
    slice's tests are found as before, by searching for the tests that read
-   the files it changes. The first full run comes at the end of Part 2, as
-   decision 36 asks at the end of each part, and a measurement of how many
-   tests a typical slice skips follows it. The measurement also shows
-   whether the 37,000-line harness file, which about 180 test files import
-   and about one Akashic commit in seven has touched since October, reruns
-   too much to stay whole.
+   the files it changes. The first full run came at the end of Part 2, on
+   2026-11-22, as decision 36 asks at the end of each part. A measurement
+   of how many tests a typical slice skips follows it. The measurement
+   also shows whether the 37,000-line harness file, which about 180 test
+   files import and about one Akashic commit in seven has touched since
+   October, reruns too much to stay whole.
 6. Change Section 7's working rules and the workspace AGENTS.md so that the
    end of each slice runs the release's tests through the selection.
 
@@ -719,17 +720,24 @@ skipped although its inputs changed. The default record file, under
 One of the three leading items (Decided): reasonable ext4 support, not
 necessarily complete.
 
+Done on 2026-11-22. Since 2026-11-21 the canonical Desktop boots by default
+from an ext4 system volume, with the user volume beside it, and Akashic's
+`local_testing/test_user_volume_killed.py` passes both recoveries after a
+cut at every flush. On 2026-11-22 the four ext4 test files passed whole on
+the emulator, the release's reference, at Akashic 1065cb64 and MegaPad
+d8016c43.
+
 Goal: a configuration's image holds the shipped libraries as ordinary files
 on ext4, with room to grow.
 
-Today, MP64FS holds 128 entries and 32 MiB, the Desktop image already fills
-32 MiB, and modules are packed into chunk files. Akashic's ext4 binding reads
-ext4, and its staged write mode is a preview limited to 1 KiB blocks and
-256-byte inodes. The image builder and the boot path handle MP64FS only.
-MegaPad's storage controller takes 32-bit sector numbers, and
-`docs/block-volume-contract.md` adds MBR and GPT volumes. Frames-follow-change
-part 4 added a read-only settings volume on a second storage controller,
-which landed on both main branches on 2026-11-01.
+When this part began, MP64FS held 128 entries and 32 MiB, the Desktop image
+already filled 32 MiB, and modules were packed into chunk files. Akashic's
+ext4 binding read ext4, and its staged write mode was a preview limited to
+1 KiB blocks and 256-byte inodes. The image builder and the boot path
+handled MP64FS only. MegaPad's storage controller takes 32-bit sector
+numbers, and `docs/block-volume-contract.md` adds MBR and GPT volumes.
+Frames-follow-change part 4 added a read-only settings volume on a second
+storage controller, which landed on both main branches on 2026-11-01.
 
 "Reasonable" means what an alpha tester needs, done well (Decided):
 
@@ -885,18 +893,16 @@ Steps:
    `local_testing/evidence/ext4-writer-20261104.md`.
 3. Teach KDOS to load modules from ext4 volumes. Done: the loader's hook,
    Akashic's module source, storage units for the system and user volumes,
-   the Desktop's boot from the system volume as an option of the image
-   builder, the cut in the loader's cost per line, the compiled token
-   form of the modules, also as an option of the image builder, and the
-   simulator's native replay and recording of token files. The default
-   boot stays the linked source build until the full Desktop journey
-   passes in the shipping form with the user volume, and becomes that
-   form then (Decided, 2026-11-18). Measured on the host on 2026-11-18,
-   the shipping form adds 7 to 9 seconds to each Desktop build, while
-   the boot to Desk's first frame takes about 7 seconds in either form
-   and the user volume adds about 1. Meanwhile the physical journey also
-   runs in the shipping form whenever loader, token, ext4 or volume code
-   changes. To do: the switch of the default.
+   the Desktop's boot from the system volume, the cut in the loader's cost
+   per line, the compiled token form of the modules, and the simulator's
+   native replay and recording of token files. The default boot stayed
+   the linked source build until the full Desktop journey passed in the
+   shipping form with the user volume (Decided, 2026-11-18), and the
+   shipping form became the default on 2026-11-21 (Akashic f82c89ab). The
+   image builder keeps the linked source build as `--linked`. Measured on
+   the host on 2026-11-18, the shipping form adds 7 to 9 seconds to each
+   Desktop build, while the boot to Desk's first frame takes about 7
+   seconds in either form and the user volume adds about 1.
    The record of this step is in MegaPad's
    `docs/module-loading-and-storage-units-2026-11-11.md`,
    `docs/performance/loader-line-cost-2026-11-11.md`,
@@ -904,8 +910,9 @@ Steps:
    `docs/simulator-native-evaluator.md`, and in Akashic's
    `local_testing/evidence/system-volume-boot-20261110.md` and
    `local_testing/evidence/token-equivalence-20261111.md`.
-4. Build ext4 images on the host.
-5. Move the image builder (Part 4a) onto them.
+4. Build ext4 images on the host. Done: the harness builds the system and
+   user volumes with e2fsprogs at a pinned version, and the host's
+   `e2fsck` checks each one it builds.
 
 Done when the canonical Desktop boots from an ext4 system volume that holds
 its modules as individual files, a user volume takes everyday writes and
@@ -1007,8 +1014,9 @@ profiles are test setups.
 
 - **4a.** In Akashic, move image building (closure, linking, layout and
   validation) out of the test harness into a supported tool, and make the
-  harness use it. This repository calls that tool at the recorded commit and
-  doesn't copy it.
+  harness use it. The tool builds every volume the harness builds today,
+  the ext4 system and user volumes among them. This repository calls that
+  tool at the recorded commit and doesn't copy it.
 - **4b.** A configuration format: one TOML file per configuration, matching
   Desk's own TOML settings. It names the Practice, the machine's memory
   and cores (every configuration runs on the whole of Leviathan, LM1
@@ -1483,9 +1491,10 @@ or before a chip is made, a lawyer reviews the licensing.
 - Three parts lead (Decided): Part 2 (ext4), Part 3 (the simulator) and
   Part 8 (the LM1 chiplet). They proceed side by side, mostly in different
   repositories: Part 2 in Akashic and MegaPad, Part 3 in MegaPad, and Part 8
-  in `lm1/`, with the link's spec (8c) in MegaPad.
-- Parts 4 and 5 can proceed alongside them. Part 4's image builder moves
-  onto ext4 once Part 2 lands.
+  in `lm1/`, with the link's spec (8c) in MegaPad. Part 2 was done on
+  2026-11-22.
+- Parts 4 and 5 can proceed alongside them. With Part 2 done, Part 4's
+  image builder starts from the ext4 volumes the harness builds.
 - The language (decision 32) starts with the checker, begun on 2026-11-20,
   and proceeds alongside the three leading parts. The release waits for the
   part of it that score-guided search needs (9f), and its LM1 backend
