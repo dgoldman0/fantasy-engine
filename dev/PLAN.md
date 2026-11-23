@@ -930,8 +930,9 @@ One of the three leading items. Steps 3a to 3d are decided, and MegaPad's
 Goal: the native simulator runs MegaPad as the multicore machine it is, and
 loads chiplets such as LM1 as modules.
 
-Today, the hosted simulator supports exactly one full core by contract. The
-emulator runs several full cores in lock-step on one host thread. MegaPad's `docs/parallel-multicore-simulation-plan.md`
+Today, the hosted simulator runs one to four full cores, which take turns in
+rounds under its own scheduler, and no clusters. The emulator runs several
+full cores in lock-step on one host thread. MegaPad's `docs/parallel-multicore-simulation-plan.md`
 and `docs/microcore-kernels-plan.md` record directions accepted on
 2026-10-27:
 
@@ -960,7 +961,11 @@ microcore stacks.
   slots, the scheduler that contract names as its target, are built as
   well. Boot gives each full core its stacks from its core ID. Done in the
   BIOS on 2026-11-22 (MegaPad 4ea4bc91); before, only the emulator's
-  host-side boot did it.
+  host-side boot did it. Done for full cores on 2026-11-23 (MegaPad
+  7e015eaa): one to four full cores take turns in rounds of 65,536 steps, a
+  test compares KDOS's multicore words on the emulator and the simulator on
+  one, two and four cores, and the BIOS's three task slots run on core 0.
+  The clusters and their microcores wait for 3e and 3g.
 - **3b. Parallel speed.** Speculative rounds land as a separately reviewed
   optimization, with one-, two- and four-lane differential evidence, as the
   parallel simulation plan requires. They serve the simulator first
@@ -980,8 +985,9 @@ microcore stacks.
   carries save and restore of a module's state. Done: the interface
   (MegaPad's `shared/accel/chiplet_module.h`), MegaPad's side of the link as
   one C++ model in the emulator and the simulator, and a test chiplet that
-  both run. In the simulator a chiplet steps where the guest reads its port
-  and when a dispatch returns; its place in rounds follows 3a.
+  both run. In the simulator a chiplet steps at the end of each of 3a's
+  rounds and, while every core sleeps, in visits of at most 4,096 steps, the
+  emulator's bound (2026-11-23).
 - **3e. Microcore gaps.** Before microcore simulation is built, the RTL
   microcore widens to 32 registers and decodes the REX prefix's extension
   bits as the full core does, and boot gives microcores their stacks. A test
@@ -990,7 +996,8 @@ microcore stacks.
   implements the full-width TACC family with the emulator's results, and
   `TACC.STORE`'s route into a chiplet's window, since borrowed tile work
   (decision 38) runs on it. Done for one core on 2026-11-20 (MegaPad
-  4b07a41c and 39e8628b); each core's own accumulator follows 3a.
+  4b07a41c and 39e8628b), and since 2026-11-23 each full core has its own
+  tile engine and accumulator.
 - **3g. Microcore kernels** (Decided 2026-11-22). Microcores run kernel
   words, and a simulator that runs Forth semantically can run nothing else
   on them, so a design round settles the kernel contract before clusters
@@ -1269,9 +1276,9 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   restore it. Stage 3, managed data, is done too (LM1 2b6835e with MegaPad
   1612d501, on both mains since 2026-11-23). The module's stand-in for LM1's
   runtime serves the shared heap, MegaPad's side is its `chiplet.f` system
-  module, and the 27 conformance tests pass in the emulator. The simulator
-  runs 21 of them; the six that need a second MegaPad core wait for Part
-  3a's cores.
+  module, and the 27 conformance tests pass in the emulator. Since
+  2026-11-23 they pass in the simulator too, the six that need a second
+  MegaPad core on two of its full cores.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
