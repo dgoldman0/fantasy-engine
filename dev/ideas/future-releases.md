@@ -10,6 +10,9 @@ what the plan has already placed after the alpha.
 - macOS (decision 23).
 - Sound Lab, Worlds and Observatory, along with audio output and the
   rich-terminal series path (decision 35).
+- A fully authentic profiler for MegaPad and LM1: timing models calibrated
+  against each chip's RTL, held to its clocks on the bench programs within
+  a stated margin, in the second release (decision 39).
 
 ## Directions recorded in other idea files
 

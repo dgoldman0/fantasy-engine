@@ -366,6 +366,19 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     use is score-guided search (Part 9f). MegaPad's
     `docs/chiplet-interconnect-plan.md` §7 holds the design, and LM1's
     `spec/04-soc.md` §8 and `spec/05-memory-gc.md` §11 hold LM1's side.
+39. Profiling in the first release matches what MegaPad has today, and the
+    second release brings a fully authentic profiler (decided 2026-11-23).
+    MegaPad's emulator charges each instruction a cost from an
+    architectural timing model and claims no parity with the RTL's clocks,
+    and its RTL keeps performance counters. LM1 matches that: its RTL
+    counts its real clocks, both of its models count cycles under one
+    stated table of per-instruction costs, all three count retired
+    instructions, and LM1 counts the events MegaPad's performance counters
+    count where LM1 has them. The second release gives both chips timing
+    models calibrated against the RTL, with a test that holds each model to
+    the RTL's clocks on the bench programs within a stated margin. A
+    calibrated model waits for that release because LM1's core changes its
+    timing in Part 8e, when its threads start switching on memory waits.
 
 ## 3. Open decisions
 
@@ -1349,7 +1362,9 @@ the language (decision 32), and the Lisp console is a learning tool.
   shared heap over when LM1 fails (Part 9d). Built so far (2026-11-22):
   `chiplet.f` holds the general words and managed data's words. System
   composition doesn't load it at boot yet, and MegaPad's own engine and the
-  Leviathan vocabulary are still to come.
+  Leviathan vocabulary are still to come. It joins boot together with 9b's
+  library, whose first user settles the owners and the boot cost (decided
+  2026-11-23).
 - **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
