@@ -930,9 +930,8 @@ One of the three leading items. Steps 3a to 3d are decided, and MegaPad's
 Goal: the native simulator runs MegaPad as the multicore machine it is, and
 loads chiplets such as LM1 as modules.
 
-Today, the hosted simulator supports exactly one full core by contract, and
-its device windows are hard-coded. The emulator runs several full cores in
-lock-step on one host thread. MegaPad's `docs/parallel-multicore-simulation-plan.md`
+Today, the hosted simulator supports exactly one full core by contract. The
+emulator runs several full cores in lock-step on one host thread. MegaPad's `docs/parallel-multicore-simulation-plan.md`
 and `docs/microcore-kernels-plan.md` record directions accepted on
 2026-10-27:
 
@@ -959,14 +958,19 @@ microcore stacks.
   one, two and four full cores. Its contract (`docs/simulator-contract.md`)
   moves from one core to the full topology, and the BIOS's cooperative task
   slots, the scheduler that contract names as its target, are built as
-  well. Boot gives each full core its stacks from its core ID, which today
-  only the emulator's host-side boot does.
+  well. Boot gives each full core its stacks from its core ID. Done in the
+  BIOS on 2026-11-22 (MegaPad 4ea4bc91); before, only the emulator's
+  host-side boot did it.
 - **3b. Parallel speed.** Speculative rounds land as a separately reviewed
   optimization, with one-, two- and four-lane differential evidence, as the
   parallel simulation plan requires. They serve the simulator first
   (Decided 2026-11-22).
 - **3c. Attaching devices.** A general way to attach devices replaces the
-  hard-coded windows, so new hardware doesn't need simulator surgery.
+  hard-coded windows, so new hardware doesn't need simulator surgery. Done
+  on 2026-11-22 (MegaPad d8016c43): a device claims its windows in one
+  native table, which refuses overlapping windows and tells the device
+  which core made each access. The emulator and the simulator share one C++
+  model of the mailbox and the spinlocks (MegaPad f317327b).
 - **3d. Chiplet modules** (Decided). The simulator imports a chiplet's model
   as a C++ module through a defined interface. The interface covers link
   endpoints, shared memory windows, interrupts, reset, and the module's place
@@ -1262,7 +1266,12 @@ One of the three leading items (Decided). It runs alongside Parts 2 to 7.
   end of the link, is done the same day (LM1 21614ef): MegaPad's emulator
   and simulator attach it, boot an LM1 image from MegaPad's memory,
   exchange doorbells with it, store into the memory it lends, and save and
-  restore it.
+  restore it. Stage 3, managed data, is done too (LM1 2b6835e with MegaPad
+  1612d501, on both mains since 2026-11-23). The module's stand-in for LM1's
+  runtime serves the shared heap, MegaPad's side is its `chiplet.f` system
+  module, and the 27 conformance tests pass in the emulator. The simulator
+  runs 21 of them; the six that need a second MegaPad core wait for Part
+  3a's cores.
 - **8e. RTL.** Bring the chiplet up to the new spec, and simulate its tiles,
   clusters and GC engines; only a single core is simulated today. Add
   MegaPad's side of the link to its SoC. Done: MegaPad's side is in its SoC,
@@ -1330,7 +1339,10 @@ the language (decision 32), and the Lisp console is a learning tool.
   MegaPad's `docs/chiplet-interconnect-plan.md`, and managed data's words
   are in its `docs/managed-data.md`. The module also carries MegaPad's own
   managed-data engine, which serves machines without LM1 and takes the
-  shared heap over when LM1 fails (Part 9d).
+  shared heap over when LM1 fails (Part 9d). Built so far (2026-11-22):
+  `chiplet.f` holds the general words and managed data's words. System
+  composition doesn't load it at boot yet, and MegaPad's own engine and the
+  Leviathan vocabulary are still to come.
 - **9b.** Akashic gets a library that hands work to the chiplet through that
   module's public interface. As with `rich-terminal.f`, Akashic doesn't
   REQUIRE a path into MegaPad or copy the module.
@@ -1385,7 +1397,12 @@ the language (decision 32), and the Lisp console is a learning tool.
   is otherwise the first work after it; recovering from a failure in the
   middle of moving objects comes later. MegaPad's `docs/managed-data.md`
   and LM1's `spec/05-memory-gc.md` §12 hold the design, each part marked
-  with the stage that builds it.
+  with the stage that builds it. Built so far (2026-11-22): MegaPad's
+  managed-data words in `chiplet.f` and LM1's side in its chiplet module
+  (Part 8d's stage 3), the three fixes, and the first stage, the records
+  and their write order. Until MegaPad's engine adopts the heap,
+  every failure of LM1 loses it. The library in 9b and the concept map are
+  still to come.
 - **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds
