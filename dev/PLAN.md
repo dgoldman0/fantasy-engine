@@ -374,11 +374,15 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     counts its real clocks, both of its models count cycles under one
     stated table of per-instruction costs, all three count retired
     instructions, and LM1 counts the events MegaPad's performance counters
-    count where LM1 has them. The second release gives both chips timing
-    models calibrated against the RTL, with a test that holds each model to
-    the RTL's clocks on the bench programs within a stated margin. A
-    calibrated model waits for that release because LM1's core changes its
-    timing in Part 8e, when its threads start switching on memory waits.
+    count where LM1 has them. LM1's chiplet module also writes a
+    per-function profile in the form of MegaPad's per-word screen profile,
+    from a symbol table LM1's compiler emits, ready before LM1's sandbox
+    engine and search library are tuned. The second release gives both
+    chips timing models calibrated against the RTL, with a test that holds
+    each model to the RTL's clocks on the bench programs within a stated
+    margin. A calibrated model waits for that release because LM1's core
+    changes its timing in Part 8e, when its threads start switching on
+    memory waits.
 
 ## 3. Open decisions
 
