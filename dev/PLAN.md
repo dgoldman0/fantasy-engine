@@ -1029,6 +1029,15 @@ Done when:
 - a test chiplet module loads and exchanges messages over its link;
 - the canonical Desktop journey passes.
 
+Status on 2026-11-23: all four hold for full cores. Desk lends its sandbox
+jobs to cores 1 to 3 while core 0 keeps serving frames, as a physical
+journey through its access prompt and module inspector shows on four
+simulated cores (Akashic 94fb237b, MegaPad 4a4a3fd7), and the canonical
+Desktop journey passes on one core and on four. The comparisons with the
+emulator cover KDOS's multicore words, the BIOS's task slots and a
+chiplet port numbered above 7. What remains is the clusters and their
+microcores (3e, 3g and the second half of 3a) and parallel rounds (3b).
+
 As the workspace rules require, results here are reported as simulator
 improvements, separate from device performance.
 
