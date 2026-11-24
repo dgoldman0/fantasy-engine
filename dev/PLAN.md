@@ -385,6 +385,21 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     memory waits. LM1's side of the first release's profiling was built on
     2026-11-23: its cycle counter, cost table, event counters and
     per-function profile.
+40. The first release has no accounts on the machine, and its
+    documentation says so (decided 2026-11-24). Anyone who holds a
+    configuration's image files can read what they hold, so the
+    getting-started guide tells users to keep those files as safe as any
+    file that holds passwords, and the command makes them readable only by
+    the user's own host account (Part 4e). Every native applet, installed
+    ones included, runs with the machine's full authority. Desk says so
+    when an applet is installed, and code the user doesn't trust runs in
+    the sandbox. Sign-ins keep their secrets out of the images' plain
+    files: the Agent's provider key lives only in memory, and an account's
+    tokens, Bluesky's among them, are sealed under a passphrase the user
+    gives once per boot, when they're first needed. Secure connections
+    verify servers against a standard set of web root certificates, so
+    feeds from any site work. Keeping applets apart from one another waits
+    for a later release.
 
 ## 3. Open decisions
 
@@ -1068,6 +1083,10 @@ profiles are test setups.
 - **4d.** Host setup: one documented way to install the dependencies and
   build the native extensions. Networking needs either a path that works
   without administrator rights or a clear one-time setup step.
+- **4e.** Privacy on the host (decision 40). The command creates each
+  configuration's images and files readable only by the user's own host
+  account, keeps debugging access to a running session off unless the
+  user turns it on, and writes no secret into a log, profile or snapshot.
 
 Done when, on a clean Linux machine and following `README.md`, `run` boots
 the canonical Desktop configuration from recorded commits, and the physical
@@ -1478,8 +1497,12 @@ material with plans and status.
 
 The planned set:
 
-- getting started: install, run a configuration, make your own;
+- getting started: install, run a configuration, make your own, and keep
+  its image files safe, since the machine has no accounts (decision 40);
 - Desk and its applets;
+- what protects the user's accounts: the passphrase, what an installed
+  applet can reach, and the sandbox for code the user doesn't trust
+  (decision 40);
 - Practices, and what each sample configuration's Practice does;
 - programming the machine: Forth, KDOS and the libraries;
 - the LM1 chiplet: the sandbox on LM1, managed data, and Lisp;
