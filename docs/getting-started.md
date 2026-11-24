@@ -21,7 +21,9 @@ and keep any copy somewhere as private as the folder itself. A shared or
 synced folder gives the machine to everyone who can read that folder.
 
 While a machine runs, its server listens in your private runtime folder, and
-the viewer talks only to a server that runs as you.
+the viewer talks only to a server that runs as you. Everything else a run
+writes, its temporary files included, stays inside the configuration's
+folder.
 
 `fantasy-engine run --debug-access` lets any program that runs as you read
 the machine's memory, keys included, and pause, step or reset it. Use it only

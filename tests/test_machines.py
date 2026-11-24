@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -216,6 +218,58 @@ def test_run_refuses_files_another_account_could_read(tmp_path, monkeypatch):
     monkeypatch.setattr(machines.subprocess, "Popen", no_server)
     with pytest.raises(machines.MachineError, match="must be the user's alone"):
         machines.run(machine, _trees(tmp_path), data_dir=tmp_path)
+
+
+FAKE_PROGRAM = """\
+import json, os, signal, socket, sys, tempfile, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import helper  # a module of the tree, whose bytecode a run must not cache
+with tempfile.NamedTemporaryFile(prefix="{name}-") as temporary:
+    record = {{"temporary": temporary.name, "no_bytecode": sys.dont_write_bytecode}}
+with open(os.path.join(os.environ["RECORD"], "{name}.json"), "w") as stream:
+    json.dump(record, stream)
+if "{name}" == "server":
+    path = sys.argv[sys.argv.index("--socket") + 1]
+    listener = socket.socket(socket.AF_UNIX)
+    listener.bind(path)
+    listener.listen()
+    signal.signal(signal.SIGTERM, lambda *ignored: sys.exit(0))
+    while True:
+        time.sleep(0.05)
+"""
+
+
+def test_a_run_writes_nothing_outside_the_configurations_folder(tmp_path, monkeypatch, request):
+    trees = _trees(tmp_path / "trees")
+    trees.megapad.mkdir(parents=True)
+    (trees.megapad / "helper.py").write_text("VALUE = 1\n")
+    (trees.megapad / "megapad.py").write_text(FAKE_PROGRAM.format(name="server"))
+    (trees.megapad / "session_viewer.py").write_text(FAKE_PROGRAM.format(name="viewer"))
+    folder = _own(tmp_path / "data", "mine")
+    machine = machines.find("mine", tmp_path / "data")
+    (folder / machines.MANIFEST_NAME).write_text(json.dumps(MANIFEST))
+    for name in MANIFEST["storage"].values():
+        (folder / name).write_bytes(b"")
+    for path in (folder, *folder.iterdir()):
+        path.chmod(0o700 if path.is_dir() else 0o600)
+    record = tmp_path / "record"
+    record.mkdir()
+    monkeypatch.setenv("RECORD", str(record))
+    # A socket's path must fit in 108 bytes, which tmp_path's may not.
+    runtime = Path(tempfile.mkdtemp(prefix="fe-run-"))
+    request.addfinalizer(lambda: shutil.rmtree(runtime, ignore_errors=True))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(runtime))
+    monkeypatch.delenv("PYTHONDONTWRITEBYTECODE", raising=False)
+    monkeypatch.setattr(machines, "stale", lambda machine, source: None)
+
+    assert machines.run(machine, trees, data_dir=tmp_path / "data",
+                        log=lambda message: None) == 0
+    for name in ("server", "viewer"):
+        seen = json.loads((record / f"{name}.json").read_text())
+        assert Path(seen["temporary"]).parent == folder / machines.SCRATCH_NAME, name
+        assert seen["no_bytecode"], name
+    assert not (trees.megapad / "__pycache__").exists()
+    assert not (folder / machines.SCRATCH_NAME).exists()
 
 
 def test_the_command_creates_files_for_the_user_alone(tmp_path, monkeypatch):

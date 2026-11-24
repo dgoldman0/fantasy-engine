@@ -12,10 +12,17 @@ Every step that needs what a configuration says asks the image tool in the
 component trees, so this repository never interprets the format.  The trees
 are the components at the commits ``components.toml`` records, assembled in
 the cache, or in development mode a workspace's checkouts as they stand.
+
+A run writes nothing outside the configuration's folder except the server's
+socket and its lock, in the private runtime folder.  The programs the
+command starts keep their temporary files in a private folder inside the
+configuration's folder, which goes when they end, and write no Python
+bytecode caches into the component trees or the command's own environment.
 """
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -25,7 +32,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,6 +48,9 @@ CONFIGURATION_FILE = "configuration.toml"
 IMAGE_NAME = "machine.img"
 MANIFEST_NAME = "machine-session.json"
 BUILT_FROM_NAME = "built-from.json"
+# The folder inside a configuration's folder that holds the temporary files
+# of the programs the command starts.
+SCRATCH_NAME = "tmp"
 _NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,62}\Z")
 # How long a server may take to prepare its machine before its socket
 # answers: the boot script runs first.
@@ -203,13 +213,41 @@ def trees(*, workspace: Path | None = None, lock_file: Path = components.LOCK_FI
                  development=True)
 
 
-def _tool(source: Trees, *arguments: str, capture: bool = False) -> subprocess.CompletedProcess:
+def environment(source: Trees, scratch: Path | None = None) -> dict[str, str]:
+    """The environment of every program the command starts from SOURCE's
+    trees: the image tool's MegaPad, no Python bytecode caches, which would
+    otherwise be written into the trees and the command's own environment,
+    and with SCRATCH the folder for temporary files."""
+
+    values = {**os.environ, "MEGAPAD_ROOT": str(source.megapad), "PYTHONDONTWRITEBYTECODE": "1"}
+    if scratch is not None:
+        values["TMPDIR"] = str(scratch)
+    return values
+
+
+@contextlib.contextmanager
+def scratch(machine: Machine) -> Iterator[Path]:
+    """A private folder inside MACHINE's folder for the temporary files of
+    the programs the command starts.  What an interrupted run left there is
+    cleared first, and the folder goes when they end."""
+
+    folder = components.private_folder(machine.folder) / SCRATCH_NAME
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(mode=0o700)
+    try:
+        yield folder
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _tool(source: Trees, *arguments: str, capture: bool = False,
+          scratch: Path | None = None) -> subprocess.CompletedProcess:
     """Run Akashic's image tool in SOURCE's trees."""
 
     return subprocess.run(
         [sys.executable, "-m", "toolchain.image", *arguments],
         cwd=source.akashic,
-        env={**os.environ, "MEGAPAD_ROOT": str(source.megapad)},
+        env=environment(source, scratch),
         capture_output=capture,
         text=True,
     )
@@ -257,8 +295,9 @@ def build(machine: Machine, source: Trees, *, log: Log = print) -> dict:
         json.dump({"components": dict(source.sources),
                    "mode": "development" if source.development else "release"}, stream)
     log(f"Building {machine.name}")
-    result = _tool(source, "build", str(machine.configuration), str(folder / IMAGE_NAME),
-                   "--built-from", str(built_from))
+    with scratch(machine) as temporary:
+        result = _tool(source, "build", str(machine.configuration), str(folder / IMAGE_NAME),
+                       "--built-from", str(built_from), scratch=temporary)
     if result.returncode != 0:
         raise MachineError(f"the image tool could not build {machine.name}")
     built = manifest(machine)
@@ -389,18 +428,21 @@ def run(machine: Machine, source: Trees, *, data_dir: Path | str | None = None,
     socket_path = runtime_root(data_dir) / f"{machine.name}.sock"
     if _answers(socket_path):
         raise MachineError(f"{machine.name} is already running on {socket_path}")
-    server = subprocess.Popen(server_command(machine, source, built, socket_path,
-                                             debug_access=debug_access))
-    try:
-        _await_server(server, socket_path, SERVER_START_SECONDS)
-        if not viewer:
-            log(f"Serving {machine.name} on {socket_path}; Ctrl+C stops it")
-            return server.wait()
-        return subprocess.run(viewer_command(source, built, socket_path)).returncode
-    except KeyboardInterrupt:
-        return 130
-    finally:
-        _stop(server)
+    with scratch(machine) as temporary:
+        children = environment(source, temporary)
+        server = subprocess.Popen(server_command(machine, source, built, socket_path,
+                                                 debug_access=debug_access), env=children)
+        try:
+            _await_server(server, socket_path, SERVER_START_SECONDS)
+            if not viewer:
+                log(f"Serving {machine.name} on {socket_path}; Ctrl+C stops it")
+                return server.wait()
+            return subprocess.run(viewer_command(source, built, socket_path),
+                                  env=children).returncode
+        except KeyboardInterrupt:
+            return 130
+        finally:
+            _stop(server)
 
 
 def new(name: str, original: Machine, source: Trees,
