@@ -1,0 +1,21 @@
+# The component commits Fantasy Engine is built from (PLAN.md decision 12).
+#
+# Each table names a component by the folder it takes in the workspace, the
+# repository it comes from and the full commit the release uses.  The build
+# takes each component's tree at exactly that commit, so a checkout's
+# uncommitted changes and its current branch never reach a build.  Moving a
+# component forward is a one-line change here, made once the new
+# combination has passed its checks; this file's history records which
+# combination passed which.
+
+[megapad]
+repository = "https://github.com/dgoldman0/megapad.git"
+commit = "42e0956472e28fcbdd6ed989981f4501c594f8a1"
+
+[akashic]
+repository = "https://github.com/dgoldman0/akashic.git"
+commit = "c43b39cf5da65dc93456d7f7909960d3db21d057"
+
+[lm1]
+repository = "https://github.com/dgoldman0/lisp-machine-LM1.git"
+commit = "71049c0392292370b27937076db51039f7a2b406"

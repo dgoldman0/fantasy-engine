@@ -5,9 +5,9 @@ lists, builds and runs any configuration, with the host privacy that
 decision 40 adds as item 4e. It was written on 2026-11-24 from read-only
 surveys of MegaPad 42e09564, Akashic c43b39cf, LM1 71049c0 and this
 repository at 585deac, plus a few small measurements that section 6 lists.
-Everything in it is a proposal awaiting approval, except the networking
-choice (C7), decided on 2026-11-24. The decisions it needs are in section 4;
-PLAN.md changes only once they are taken.
+It was approved on 2026-11-24 with every recommendation of section 4, the
+networking choice (C7) among them as revised that day, and the stages run in
+the order 1, 7, 2, then 3 to 6 and 8.
 
 Part 4 is done, as PLAN.md states, when `run` boots the canonical Desktop
 configuration from recorded commits on a clean Linux machine by following

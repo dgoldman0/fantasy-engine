@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fantasy-engine"
+version = "0.1.0.dev0"
+description = "Builds and runs Fantasy Engine, the MegaPad and LM1 machine, from its components."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.13"
+dependencies = [
+    # MegaPad's native extensions build with these, for the Python that runs
+    # the command.
+    "pybind11>=2.12",
+    "setuptools>=77",
+]
+
+[project.scripts]
+fantasy-engine = "fantasy_engine.command:main"
+
+[tool.setuptools.packages.find]
+include = ["fantasy_engine*"]

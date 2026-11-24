@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-FANTASY_ENGINE_ROOT = Path(__file__).resolve().parents[2]
+from ..workspace import FANTASY_ENGINE_ROOT, workspace_root
 
 # Variables that a repository's launch sets for its own units: where its
 # tests find another checkout, and the pinned tools they run.  The runner
@@ -455,11 +455,6 @@ class LM1Repo(Repo):
         if self.megapad_root is not None:
             launch.env["MEGAPAD_ROOT"] = str(self.megapad_root)
         return launch
-
-
-def workspace_root() -> Path:
-    configured = os.environ.get("FE_WORKSPACE")
-    return Path(configured).resolve() if configured else FANTASY_ENGINE_ROOT.parent
 
 
 def repositories(root: Path | None = None) -> list[Repo]:

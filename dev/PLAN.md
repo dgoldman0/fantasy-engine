@@ -576,14 +576,16 @@ and run it replaces that ending and `docs/` arrives, so from then on nothing
 outside `dev/` describes plans. Nothing in this repository copies component
 source.
 
-**1b. The lock file** (Decided). A small file here names each component's
-repository and commit. The build takes exactly those commits, with
-`git archive` from the checkouts in the workspace or from a fresh clone when
-they're absent, so a dirty or switched checkout can't leak into a build.
-Moving a component forward is a one-line commit here, and the file's history
-records which combination passed which checks. Proposed: since pushes are
-made by hand, the tool warns when a recorded commit isn't on its component's
-remote yet. Done when one command assembles every component at
+**1b. The lock file** (Decided). A small file here, `components.toml`, names
+each component's repository and commit. The build takes exactly those
+commits, with `git archive` from the checkouts in the workspace or from a
+fetch of the recorded commit when they're absent, so a dirty or switched
+checkout can't leak into a build. Moving a component forward is a one-line
+commit here, and the file's history records which combination passed which
+checks. Since pushes are made by hand, the command warns when a recorded
+commit isn't on its component's remote yet. The lock file is built as
+Part 4's first stage, since Part 4's done-when names recorded commits
+(decided 2026-11-24). Done when one command assembles every component at
 its recorded commit from a fresh checkout.
 
 **1c. Split LM1 into the chiplet.** Done on 2026-10-27, LM1 commit 0afe4af.
@@ -1065,6 +1067,9 @@ Goal: one command lists, builds and runs any configuration.
 Today, only the test harness builds images. A Desktop session takes
 `akashic_tui.py serve` plus MegaPad's `session_viewer.py`, and the canonical
 profiles are test setups.
+
+Part 4 begins with Part 1b's lock file, since its done-when names recorded
+commits (decided 2026-11-24). `dev/part4-plan.md` stages the work.
 
 - **4a.** In Akashic, move image building (closure, linking, layout and
   validation) out of the test harness into a supported tool, and make the
