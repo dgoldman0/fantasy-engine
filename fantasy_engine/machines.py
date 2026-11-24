@@ -353,6 +353,25 @@ def _stop(server: subprocess.Popen) -> None:
             server.wait(timeout=10.0)
 
 
+def exposed(machine: Machine, built: Mapping) -> list[str]:
+    """What of MACHINE's folder another account owns or could read or
+    write: the folder itself, each volume BUILT names, and the manifest.
+    The volumes hold everything the machine knows, keys and sign-ins
+    included, and the machine has no accounts of its own."""
+
+    paths = [machine.folder, machine.folder / MANIFEST_NAME,
+             *(machine.folder / name for name in built.get("storage", {}).values() if name)]
+    found = []
+    for path in paths:
+        info = path.stat()
+        if info.st_uid != os.getuid():
+            found.append(f"{path} belongs to another account")
+        elif info.st_mode & 0o077:
+            found.append(f"{path} is open to other accounts "
+                         f"(mode {info.st_mode & 0o777:o}; chmod go= it)")
+    return found
+
+
 def run(machine: Machine, source: Trees, *, data_dir: Path | str | None = None,
         viewer: bool = True, debug_access: bool = False, log: Log = print) -> int:
     """Build MACHINE when what it was built from changed, serve it, and
@@ -363,6 +382,10 @@ def run(machine: Machine, source: Trees, *, data_dir: Path | str | None = None,
     built = build(machine, source, log=log) if reason else manifest(machine)
     if reason:
         log(f"Built {machine.name}: {reason}")
+    problems = exposed(machine, built)
+    if problems:
+        raise MachineError(f"{machine.name}'s files must be the user's alone: "
+                           + "; ".join(problems))
     socket_path = runtime_root(data_dir) / f"{machine.name}.sock"
     if _answers(socket_path):
         raise MachineError(f"{machine.name} is already running on {socket_path}")

@@ -20,6 +20,7 @@ stand instead, which is development mode.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -138,11 +139,16 @@ _COMMANDS = {"list": _list, "build": _build, "run": _run, "new": _new, "prepare"
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    # Whatever the command and the programs it starts create is the user's
+    # alone; the image tool and the server also set their files' modes.
+    previous = os.umask(0o077)
     try:
         return _COMMANDS[args.command](args)
     except (components.ComponentError, machines.MachineError) as error:
         print(f"fantasy-engine: {error}", file=sys.stderr)
         return 1
+    finally:
+        os.umask(previous)
 
 
 if __name__ == "__main__":

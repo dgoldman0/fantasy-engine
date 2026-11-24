@@ -192,3 +192,40 @@ def test_a_build_in_development_mode_keeps_the_user_volume(tmp_path, monkeypatch
     assert machines.stale(machine, trees) == "its configuration changed"
     assert machines.build(machine, trees, log=lambda message: None)["title"] == "Pad"
     assert user.read_bytes()[-4:] == b"mine"
+
+
+def test_run_refuses_files_another_account_could_read(tmp_path, monkeypatch):
+    folder = _own(tmp_path, "mine")
+    machine = machines.find("mine", tmp_path)
+    (folder / machines.MANIFEST_NAME).write_text(json.dumps(MANIFEST))
+    for name in MANIFEST["storage"].values():
+        (folder / name).write_bytes(b"")
+    for path in (folder, *folder.iterdir()):
+        path.chmod(0o700 if path.is_dir() else 0o600)
+    assert machines.exposed(machine, MANIFEST) == []
+    (folder / "machine-user.img").chmod(0o644)
+    folder.chmod(0o755)
+    found = machines.exposed(machine, MANIFEST)
+    assert len(found) == 2
+    assert any("machine-user.img is open to other accounts (mode 644" in line for line in found)
+
+    def no_server(*args, **kwargs):
+        raise AssertionError("an exposed machine starts no server")
+
+    monkeypatch.setattr(machines, "stale", lambda machine, source: None)
+    monkeypatch.setattr(machines.subprocess, "Popen", no_server)
+    with pytest.raises(machines.MachineError, match="must be the user's alone"):
+        machines.run(machine, _trees(tmp_path), data_dir=tmp_path)
+
+
+def test_the_command_creates_files_for_the_user_alone(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setitem(command._COMMANDS, "list",
+                        lambda args: seen.append(os.umask(0o077)) or 0)
+    previous = os.umask(0o022)
+    try:
+        assert command.main(["list", "--data-dir", str(tmp_path)]) == 0
+        assert seen == [0o077]
+        assert os.umask(0o022) == 0o022
+    finally:
+        os.umask(previous)
