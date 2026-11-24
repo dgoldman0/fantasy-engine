@@ -382,7 +382,9 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     each model to the RTL's clocks on the bench programs within a stated
     margin. A calibrated model waits for that release because LM1's core
     changes its timing in Part 8e, when its threads start switching on
-    memory waits.
+    memory waits. LM1's side of the first release's profiling was built on
+    2026-11-23: its cycle counter, cost table, event counters and
+    per-function profile.
 
 ## 3. Open decisions
 
@@ -1372,10 +1374,11 @@ the language (decision 32), and the Lisp console is a learning tool.
   MegaPad's `docs/chiplet-interconnect-plan.md`, and managed data's words
   are in its `docs/managed-data.md`. The module also carries MegaPad's own
   managed-data engine, which serves machines without LM1 and takes the
-  shared heap over when LM1 fails (Part 9d). Built so far (2026-11-22):
-  `chiplet.f` holds the general words and managed data's words. System
-  composition doesn't load it at boot yet, and MegaPad's own engine and the
-  Leviathan vocabulary are still to come. It joins boot together with 9b's
+  shared heap over when LM1 fails (Part 9d). Built so far (2026-11-23):
+  `chiplet.f` holds the general words, managed data's words, and MegaPad's
+  own engine as far as taking the heap over when LM1 fails. System
+  composition doesn't load it at boot yet, and the Leviathan vocabulary is
+  still to come. It joins boot together with 9b's
   library, whose first user settles the owners and the boot cost (decided
   2026-11-23).
 - **9b.** Akashic gets a library that hands work to the chiplet through that
@@ -1432,12 +1435,12 @@ the language (decision 32), and the Lisp console is a learning tool.
   is otherwise the first work after it; recovering from a failure in the
   middle of moving objects comes later. MegaPad's `docs/managed-data.md`
   and LM1's `spec/05-memory-gc.md` §12 hold the design, each part marked
-  with the stage that builds it. Built so far (2026-11-22): MegaPad's
+  with the stage that builds it. Built so far (2026-11-23): MegaPad's
   managed-data words in `chiplet.f` and LM1's side in its chiplet module
-  (Part 8d's stage 3), the three fixes, and the first stage, the records
-  and their write order. Until MegaPad's engine adopts the heap,
-  every failure of LM1 loses it. The library in 9b and the concept map are
-  still to come.
+  (Part 8d's stage 3), the three fixes, and both of the release's stages:
+  the records and their write order, and MegaPad's engine adopting the heap
+  whenever the records show it sound. A restarted LM1 taking the heap back
+  is not built. The library in 9b and the concept map are still to come.
 - **9e. The Lisp console.** An applet talks to the chiplet's REPL, which
   `spec/06` places in the chiplet's own runtime along with the compiler. The
   Workshop includes it for learning (Part 7), and any Practice can. Pad holds
