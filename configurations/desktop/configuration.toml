@@ -1,0 +1,63 @@
+# The Desktop: Desk with Pad, File Explorer, Daybook, Grid and the Agent in
+# tiles, and Streams on its launcher.  Akashic's image tool reads this file
+# (python3 -m toolchain.image); docs/image/configuration.md in Akashic says
+# what each table means.
+
+[configuration]
+format = 1
+title = "Desktop"
+description = "Desk with Pad, File Explorer, Daybook, Grid and the Agent, and Streams on the launcher."
+
+[practice]
+# Built-in applets Desk offers on its launcher without opening them.
+offer = ["streams"]
+
+# The applets Desk opens in tiles, in order.
+[[practice.entry]]
+applet = "pad"
+
+[[practice.entry]]
+applet = "file-explorer"
+
+[[practice.entry]]
+applet = "daybook"
+
+[[practice.entry]]
+applet = "grid"
+
+[[practice.entry]]
+applet = "agent"
+
+[agent]
+# The scripted provider answers without a network, as the Desktop's
+# journey needs; real providers come later.
+provider = "scripted"
+
+[machine]
+# MegaPad's external memory, and its full cores.
+memory-mib = 384
+cores = 1
+
+[volumes.user]
+# The user's own volume.  Its documents start as the samples Akashic keeps,
+# copied when the volume is made, and never again.
+size-mib = 64
+documents = "akashic:assets/samples/desktop"
+
+[volumes.system]
+# Module source beside the token forms, which the Workshop will need.
+keep-source = false
+
+[viewer]
+cols = 160
+rows = 48
+font-size = 16
+
+[network]
+enabled = false
+
+# Desk's system settings, written to the settings volume as system.toml.
+[desk.rich-terminal]
+safe-mode = false
+full-refresh-quiet-ms = 1000
+full-refresh-interval-ms = 5000
