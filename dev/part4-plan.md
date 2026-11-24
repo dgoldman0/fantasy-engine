@@ -642,9 +642,13 @@ several versions, which multiplies the testing. Recommended: (a). Cost: none.
 `e2fsck` from 1.47.0 on, checked by version and feature, with tests keeping
 the 1.47.4 pin; (b) require 1.47.4, which users would build themselves; (c) a
 host-side ext4 writer that needs no e2fsprogs, which is a large new piece.
-Recommended: (a), since 1.47.0 measured identical apart from a write counter.
-Cost: about 2 hours inside stage 2. The alpha's hosts then start at Ubuntu
-24.04, Debian 12 and current Fedora.
+Recommended: (a). 1.47.0 builds the same system volume as the pin, byte for
+byte. Its user volume differs only in marking the block groups that hold
+superblock backups (1, 3 and 5 on a 64 MiB volume) BLOCK_UNINIT, which
+Akashic's ext4 driver refused at its first write until stage 2 taught it the
+bitmap such a group stands for (measured and fixed 2026-11-24). Cost: about
+2 hours inside stage 2, and about 2 more for the driver. The alpha's hosts
+then start at Ubuntu 24.04, Debian 12 and current Fedora.
 
 **C7. Networking without administrator rights.** Decided 2026-11-24:
 libslirp, linked into MegaPad's native extension, with TAP documented as the
