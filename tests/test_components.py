@@ -276,10 +276,14 @@ def test_build_assembles_every_component_and_builds_each_once(tmp_path, monkeypa
     assert stamp["march"] == components.NATIVE_MARCH == "x86-64-v2"
     assert (lm1 / "chiplet" / "build" / "megapad-root").read_text().strip() == str(megapad)
 
-    # A second build finds everything done.
+    # A second build finds everything done, without taking a tree's lock, so
+    # a run of a prepared machine writes nothing to the cache.
     (megapad / "built-for").unlink()
+    for lock_file in cache.glob("components/.*.lock"):
+        lock_file.unlink()
     assert command.main(["prepare", "--components", str(lock), "--cache-dir", str(cache)]) == 0
     assert not (megapad / "built-for").exists()
+    assert not list(cache.glob("components/.*.lock"))
 
 
 def test_a_failed_build_is_reported_and_left_unrecorded(tmp_path, monkeypatch, capsys):

@@ -242,6 +242,10 @@ def assemble(component: Component, components: list[Component], *, cache: Path,
 
     trees = private_folder(cache / "components")
     tree = trees / tree_name(component, components)
+    # A tree appears whole, its stamp inside, so one found complete needs no
+    # lock, and a run of a prepared machine writes nothing to the cache.
+    if _assembled(tree, component):
+        return tree
     with _locked(trees / f".{tree.name}.lock"):
         if _assembled(tree, component):
             return tree
@@ -336,11 +340,13 @@ def build_native(trees: dict[str, Path], *, python: str = sys.executable,
     Each build holds its tree's lock, so two commands never build in one
     tree at once."""
 
-    if shutil.which("make") is None:
-        raise ComponentError("building the native parts needs make, which is not installed")
     abi = sysconfig.get_config_var("SOABI") if python == sys.executable else _abi(python)
     megapad, lm1 = trees["megapad"], trees["lm1"]
     megapad_stamp, lm1_stamp = native_stamps(trees, abi)
+    if megapad_stamp.exists() and lm1_stamp.exists():
+        return
+    if shutil.which("make") is None:
+        raise ComponentError("building the native parts needs make, which is not installed")
     with _locked(megapad.parent / f".{megapad.name}.lock"):
         if not megapad_stamp.exists():
             _require_pybind11(python)
