@@ -261,7 +261,7 @@ def test_build_assembles_every_component_and_builds_each_once(tmp_path, monkeypa
     monkeypatch.setattr(components, "_require_pybind11", lambda python: None)
     cache = tmp_path / "cache"
 
-    assert command.main(["build", "--components", str(lock), "--cache-dir", str(cache)]) == 0
+    assert command.main(["prepare", "--components", str(lock), "--cache-dir", str(cache)]) == 0
     output = capsys.readouterr()
     assert "warning: megapad's recorded commit" in output.err
     trees = dict(line.split(": ", 1) for line in output.out.splitlines() if ": /" in line)
@@ -273,7 +273,7 @@ def test_build_assembles_every_component_and_builds_each_once(tmp_path, monkeypa
 
     # A second build finds everything done.
     (megapad / "built-for").unlink()
-    assert command.main(["build", "--components", str(lock), "--cache-dir", str(cache)]) == 0
+    assert command.main(["prepare", "--components", str(lock), "--cache-dir", str(cache)]) == 0
     assert not (megapad / "built-for").exists()
 
 
@@ -285,12 +285,12 @@ def test_a_failed_build_is_reported_and_left_unrecorded(tmp_path, monkeypatch, c
     monkeypatch.setattr(components, "_require_pybind11", lambda python: None)
     cache = tmp_path / "cache"
 
-    assert command.main(["build", "--components", str(lock), "--cache-dir", str(cache)]) == 1
+    assert command.main(["prepare", "--components", str(lock), "--cache-dir", str(cache)]) == 1
     assert "building MegaPad's native extensions" in capsys.readouterr().err
     assert not list(cache.glob("components/megapad-*/.fantasy-engine-native.*"))
 
 
 def test_the_command_reports_a_missing_lock_file(tmp_path, capsys):
-    assert command.main(["build", "--components", str(tmp_path / "none.toml"),
+    assert command.main(["prepare", "--components", str(tmp_path / "none.toml"),
                          "--cache-dir", str(tmp_path / "cache")]) == 1
     assert "fantasy-engine: there is no lock file" in capsys.readouterr().err
