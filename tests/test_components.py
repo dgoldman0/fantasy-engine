@@ -250,7 +250,8 @@ def fake_components(workspace: Path, *, megapad_build: str) -> dict[str, tuple[s
 
 
 MEGAPAD_BUILD = ("build:\n\t$(VENV_PY) -c \"import sysconfig; "
-                 "open('built-for', 'w').write(sysconfig.get_config_var('SOABI'))\"\n")
+                 "open('built-for', 'w').write(sysconfig.get_config_var('SOABI'))\"\n"
+                 "\techo \"$$MP64_MARCH $$PYTHONDONTWRITEBYTECODE\" > built-with\n")
 
 
 def test_build_assembles_every_component_and_builds_each_once(tmp_path, monkeypatch, capsys):
@@ -268,7 +269,11 @@ def test_build_assembles_every_component_and_builds_each_once(tmp_path, monkeypa
     megapad, lm1 = Path(trees["megapad"]), Path(trees["lm1"])
     abi = sysconfig.get_config_var("SOABI")
     assert (megapad / "built-for").read_text() == abi
-    assert (megapad / f".fantasy-engine-native.{abi}.json").exists()
+    # Every native part is built for the release's baseline, without
+    # writing bytecode caches.
+    assert (megapad / "built-with").read_text().split() == ["x86-64-v2", "1"]
+    stamp = json.loads((megapad / f".fantasy-engine-native.{abi}.json").read_text())
+    assert stamp["march"] == components.NATIVE_MARCH == "x86-64-v2"
     assert (lm1 / "chiplet" / "build" / "megapad-root").read_text().strip() == str(megapad)
 
     # A second build finds everything done.

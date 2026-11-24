@@ -10,8 +10,10 @@ uncommitted changes and its current branch therefore never reach a build.
 ``build_native`` then builds the native parts in the assembled trees with
 each component's own build: MegaPad's ``make build``, for the Python that
 runs this command, and LM1's chiplet Makefile, against the assembled
-MegaPad.  LM1's chiplet module compiles MegaPad's header in, so LM1's tree
-is kept apart for each MegaPad commit it is built against.
+MegaPad.  Every part is compiled for the release's x86-64-v2 baseline, so
+what a person builds matches what prebuilt releases ship.  LM1's chiplet
+module compiles MegaPad's header in, so LM1's tree is kept apart for each
+MegaPad commit it is built against.
 
 Everything here lives under the cache folder, in folders that only the
 user's own account can open (PLAN.md decision 40).
@@ -44,6 +46,15 @@ LOCK_FILE = FANTASY_ENGINE_ROOT / "components.toml"
 # The components in the order they are prepared.  LM1's chiplet module
 # builds against MegaPad's header, so MegaPad comes first.
 COMPONENT_NAMES = ("megapad", "akashic", "lm1")
+
+# The processor level the command builds every native part for: the
+# release's baseline (PLAN.md decision 23), for which LM1's chiplet module
+# is always built and MegaPad's extensions are built when MP64_MARCH names it.
+NATIVE_MARCH = "x86-64-v2"
+# What x86-64-v2 adds to the first x86-64 processors, as Linux names the
+# features in /proc/cpuinfo: CMPXCHG16B, LAHF and SAHF in 64-bit mode,
+# POPCNT, SSE3, SSSE3, SSE4.1 and SSE4.2.
+NATIVE_MARCH_FEATURES = ("cx16", "lahf_lm", "popcnt", "pni", "ssse3", "sse4_1", "sse4_2")
 _KEYS = frozenset(("repository", "commit"))
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 
@@ -293,38 +304,54 @@ def unpushed(component: Component, workspace: Path | None) -> str | None:
 
 def _run_build(arguments: list[str], what: str, log: Log) -> None:
     log(f"Building {what}")
-    result = subprocess.run(arguments, capture_output=True, text=True)
+    result = subprocess.run(arguments, capture_output=True, text=True, env=native_environment())
     if result.returncode != 0:
         output = (result.stdout + result.stderr).strip().splitlines()
         raise ComponentError(f"building {what} failed: {' '.join(arguments)}\n"
                              + "\n".join(output[-40:]))
 
 
+def native_environment() -> dict[str, str]:
+    """The environment of the native builds: MegaPad's extensions compiled
+    for NATIVE_MARCH, and no Python bytecode caches written into the trees
+    or the command's own environment by the build scripts."""
+
+    return {**os.environ, "MP64_MARCH": NATIVE_MARCH, "PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def native_stamps(trees: dict[str, Path], abi: str) -> tuple[Path, Path]:
+    """The records in the assembled TREES of MegaPad's extensions built for
+    the Python of ABI, and of LM1's chiplet module."""
+
+    return (trees["megapad"] / f".fantasy-engine-native.{abi}.json",
+            trees["lm1"] / ".fantasy-engine-native.json")
+
+
 def build_native(trees: dict[str, Path], *, python: str = sys.executable,
                  log: Log = print) -> None:
     """Build the native parts in the assembled TREES with each component's
-    own build: MegaPad's two extensions for PYTHON, and LM1's chiplet module
-    against the assembled MegaPad.  A tree whose build is already recorded,
-    for this Python where that matters, is left as it is.  Each build holds
-    its tree's lock, so two commands never build in one tree at once."""
+    own build, for NATIVE_MARCH: MegaPad's extensions for PYTHON, and LM1's
+    chiplet module against the assembled MegaPad.  A tree whose build is
+    already recorded, for this Python where that matters, is left as it is.
+    Each build holds its tree's lock, so two commands never build in one
+    tree at once."""
 
     if shutil.which("make") is None:
         raise ComponentError("building the native parts needs make, which is not installed")
     abi = sysconfig.get_config_var("SOABI") if python == sys.executable else _abi(python)
     megapad, lm1 = trees["megapad"], trees["lm1"]
+    megapad_stamp, lm1_stamp = native_stamps(trees, abi)
     with _locked(megapad.parent / f".{megapad.name}.lock"):
-        stamp = megapad / f".fantasy-engine-native.{abi}.json"
-        if not stamp.exists():
+        if not megapad_stamp.exists():
             _require_pybind11(python)
             _run_build(["make", "-C", str(megapad), "build", f"VENV_PY={python}"],
                        f"MegaPad's native extensions for {abi}", log)
-            _write_stamp(stamp, {"python": python, "abi": abi})
+            _write_stamp(megapad_stamp, {"python": python, "abi": abi, "march": NATIVE_MARCH})
     with _locked(lm1.parent / f".{lm1.name}.lock"):
-        stamp = lm1 / ".fantasy-engine-native.json"
-        if not stamp.exists():
+        if not lm1_stamp.exists():
             _run_build(["make", "-C", str(lm1 / "chiplet"), f"MEGAPAD_ROOT={megapad}"],
                        "LM1's chiplet module", log)
-            _write_stamp(stamp, {"megapad": str(megapad)})
+            _write_stamp(lm1_stamp, {"megapad": str(megapad), "march": NATIVE_MARCH})
 
 
 def _abi(python: str) -> str:
@@ -348,14 +375,13 @@ def _write_stamp(path: Path, facts: dict) -> None:
     path.write_text(json.dumps(facts, indent=2) + "\n")
 
 
-def prepare(lock_file: Path | str = LOCK_FILE, *, cache_dir: Path | str | None = None,
-            workspace: Path | None = None, log: Log = print,
-            warn: Log | None = None) -> dict[str, Path]:
+def assemble_all(lock_file: Path | str = LOCK_FILE, *, cache_dir: Path | str | None = None,
+                 workspace: Path | None = None, log: Log = print,
+                 warn: Log | None = None) -> dict[str, Path]:
     """Every component at the commit LOCK_FILE records, assembled into the
-    cache with its native parts built, by name.  WORKSPACE, the workspace's
-    folder by default, is where checkouts that may already hold the commits
-    sit.  Each recorded commit that no remote-tracking branch holds is
-    reported through WARN."""
+    cache, by name.  WORKSPACE, the workspace's folder by default, is where
+    checkouts that may already hold the commits sit.  Each recorded commit
+    that no remote-tracking branch holds is reported through WARN."""
 
     if warn is None:
         warn = lambda message: print(f"warning: {message}", file=sys.stderr)  # noqa: E731
@@ -368,8 +394,18 @@ def prepare(lock_file: Path | str = LOCK_FILE, *, cache_dir: Path | str | None =
         message = unpushed(component, workspace)
         if message:
             warn(message)
-    trees = {component.name: assemble(component, components, cache=cache,
-                                      workspace=workspace, log=log)
-             for component in components}
+    return {component.name: assemble(component, components, cache=cache,
+                                     workspace=workspace, log=log)
+            for component in components}
+
+
+def prepare(lock_file: Path | str = LOCK_FILE, *, cache_dir: Path | str | None = None,
+            workspace: Path | None = None, log: Log = print,
+            warn: Log | None = None) -> dict[str, Path]:
+    """Every component at the commit LOCK_FILE records, assembled into the
+    cache with its native parts built, by name (assemble_all)."""
+
+    trees = assemble_all(lock_file, cache_dir=cache_dir, workspace=workspace, log=log,
+                         warn=warn)
     build_native(trees, log=log)
     return trees
