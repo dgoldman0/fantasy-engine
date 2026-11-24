@@ -165,8 +165,9 @@ designs included, will be licensed under Apache-2.0, and its documentation
 under CC BY 4.0.
 
 The plan for the first release, with the reasons for each decision, is public
-in [dev/PLAN.md](dev/PLAN.md). For now this repository holds that plan and the
-tool that runs the whole system's tests, and the release itself will be
+in [dev/PLAN.md](dev/PLAN.md). This repository holds that plan, the
+`fantasy-engine` command that builds and runs the machine from its parts, and
+the tool that runs the whole system's tests, and the release itself will be
 assembled here.
 
 The parts are developed in their own public repositories, which are written
@@ -178,3 +179,60 @@ the Lisp processor.
 
 To talk about the project, join the Tinkerers Guild channel on the
 Barayin-Adamah Discord server: <https://discord.gg/AnrXxhs3b2>.
+
+## Installing
+
+Until the first release brings prebuilt parts, Fantasy Engine installs from
+source. It needs Linux on a 64-bit Intel or AMD PC, or Windows with WSL2,
+whose WSLg shows the viewer's window. Installing takes four steps.
+
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/),
+   which needs no administrator rights. It installs the command and brings
+   Python 3.13 when your system's Python is older.
+
+   ```
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. Install the tools that build the machine's native parts and its disks: git,
+   make, a C++17 compiler (GCC 11 or Clang 12 or later), pkg-config with the
+   development files of libslirp and GLib, which the machine's network uses,
+   and e2fsprogs 1.47.0 or later. Desktop Linux systems usually carry
+   e2fsprogs already, though Ubuntu 22.04's is too old. On Ubuntu 24.04 and
+   Debian 12, the rest takes one command with administrator rights:
+
+   ```
+   sudo apt install git build-essential pkg-config libslirp-dev libglib2.0-dev
+   ```
+
+   The viewer draws text in its own font and falls back to the Noto fonts for
+   scripts and symbols that font lacks (`fonts-noto-core`, `fonts-noto-cjk`
+   and `fonts-noto-color-emoji` on Ubuntu and Debian).
+
+3. Get this repository and install the `fantasy-engine` command from it with
+   uv, which also installs the Python packages the command and its viewer use:
+
+   ```
+   git clone https://github.com/dgoldman0/fantasy-engine.git
+   cd fantasy-engine
+   uv tool install --python 3.13 --editable .
+   ```
+
+   If your shell cannot find `fantasy-engine` afterwards, `uv tool
+   update-shell` adds uv's folder of commands to your `PATH`.
+
+4. Check the computer:
+
+   ```
+   fantasy-engine doctor
+   ```
+
+   `doctor` checks each requirement and says what to do about any that is
+   missing. On its first run it fetches the machine's three components at the
+   commits this repository records, about 150 MB once unpacked, and it builds
+   nothing.
+
+`fantasy-engine run desktop` then builds the Desktop and opens it in a window.
+The first run also builds the native parts, which takes a few minutes.
+Before you keep anything of your own on the machine, read how to keep its
+files safe in [docs/getting-started.md](docs/getting-started.md).
