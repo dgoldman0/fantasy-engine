@@ -4,6 +4,7 @@
     fantasy-engine build NAME
     fantasy-engine run NAME [--no-viewer] [--debug-access]
     fantasy-engine new NAME FROM
+    fantasy-engine doctor
     fantasy-engine prepare
 
 ``list`` shows the shipped configurations and the user's own, with whether
@@ -11,8 +12,10 @@ each is built.  ``build`` builds a configuration's volumes; ``run`` builds
 them when what they were built from changed, serves them in MegaPad's
 simulator and opens the viewer, and stops the server when the viewer
 closes.  ``new`` copies a configuration under a new name for the user to
-edit.  ``prepare`` assembles the components at the commits ``components.toml``
-records and builds their native parts, which ``build`` and ``run`` also do.
+edit.  ``doctor`` checks what this computer needs and says what to do about
+anything missing.  ``prepare`` assembles the components at the commits
+``components.toml`` records and builds their native parts, which ``build``
+and ``run`` also do.
 With ``--workspace DIR`` the commands use that workspace's checkouts as they
 stand instead, which is development mode.
 """
@@ -24,7 +27,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import components, machines
+from . import components, doctor, machines
 
 
 def _add_sources(parser: argparse.ArgumentParser) -> None:
@@ -79,6 +82,12 @@ def _parser() -> argparse.ArgumentParser:
     new.add_argument("original", metavar="FROM")
     _add_sources(new)
     _add_data(new)
+
+    checkup = commands.add_parser(
+        "doctor", help="check what this computer needs to build and run configurations",
+        description="Check each thing this computer needs to build and run Fantasy "
+                    "Engine, and say what to do about any that is missing.")
+    _add_sources(checkup)
 
     prepare = commands.add_parser(
         "prepare", help="prepare the components at their recorded commits",
@@ -136,7 +145,13 @@ def _prepare(args: argparse.Namespace) -> int:
     return 0
 
 
-_COMMANDS = {"list": _list, "build": _build, "run": _run, "new": _new, "prepare": _prepare}
+def _doctor(args: argparse.Namespace) -> int:
+    return doctor.report(doctor.examine(workspace=args.workspace, lock_file=args.components,
+                                        cache_dir=args.cache_dir))
+
+
+_COMMANDS = {"list": _list, "build": _build, "run": _run, "new": _new, "doctor": _doctor,
+             "prepare": _prepare}
 
 
 def main(argv: list[str] | None = None) -> int:
