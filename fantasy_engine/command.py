@@ -110,14 +110,16 @@ def _list(args: argparse.Namespace) -> int:
 
 def _build(args: argparse.Namespace) -> int:
     machine = machines.find(args.name, args.data_dir)
-    machines.build(machine, _trees(args))
+    with machines.in_use(machine):
+        machines.build(machine, _trees(args))
     return 0
 
 
 def _run(args: argparse.Namespace) -> int:
     machine = machines.find(args.name, args.data_dir)
-    return machines.run(machine, _trees(args), data_dir=args.data_dir,
-                        viewer=not args.no_viewer, debug_access=args.debug_access)
+    with machines.in_use(machine):
+        return machines.run(machine, _trees(args), data_dir=args.data_dir,
+                            viewer=not args.no_viewer, debug_access=args.debug_access)
 
 
 def _new(args: argparse.Namespace) -> int:

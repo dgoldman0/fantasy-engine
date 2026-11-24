@@ -23,6 +23,7 @@ bytecode caches into the component trees or the command's own environment.
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -51,6 +52,8 @@ BUILT_FROM_NAME = "built-from.json"
 # The folder inside a configuration's folder that holds the temporary files
 # of the programs the command starts.
 SCRATCH_NAME = "tmp"
+# The file a command locks while it builds or runs a configuration.
+LOCK_NAME = "machine.lock"
 _NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,62}\Z")
 # How long a server may take to prepare its machine before its socket
 # answers: the boot script runs first.
@@ -223,6 +226,25 @@ def environment(source: Trees, scratch: Path | None = None) -> dict[str, str]:
     if scratch is not None:
         values["TMPDIR"] = str(scratch)
     return values
+
+
+@contextlib.contextmanager
+def in_use(machine: Machine) -> Iterator[None]:
+    """Hold MACHINE for one command while it builds or runs it, so that no
+    build replaces the volumes of a running machine or writes them while
+    another build does.  A configuration another command holds is refused."""
+
+    folder = components.private_folder(machine.folder)
+    descriptor = os.open(folder / LOCK_NAME, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise MachineError(f"{machine.name} is in use: another fantasy-engine command "
+                               f"is building or running it") from None
+        yield
+    finally:
+        os.close(descriptor)
 
 
 @contextlib.contextmanager

@@ -272,6 +272,18 @@ def test_a_run_writes_nothing_outside_the_configurations_folder(tmp_path, monkey
     assert not (folder / machines.SCRATCH_NAME).exists()
 
 
+def test_a_configuration_another_command_holds_is_refused(tmp_path, capsys):
+    _own(tmp_path, "mine")
+    machine = machines.find("mine", tmp_path)
+    with machines.in_use(machine):
+        for subcommand in ("build", "run"):
+            assert command.main([subcommand, "mine", "--data-dir", str(tmp_path)]) == 1
+            assert "mine is in use" in capsys.readouterr().err
+    assert stat.S_IMODE((machine.folder / machines.LOCK_NAME).stat().st_mode) == 0o600
+    with machines.in_use(machine):
+        pass
+
+
 def test_the_command_creates_files_for_the_user_alone(tmp_path, monkeypatch):
     seen = []
     monkeypatch.setitem(command._COMMANDS, "list",
