@@ -1081,12 +1081,16 @@ profiles are test setups.
   existing one. `run` builds when needed, starts the simulator and opens the
   viewer.
 - **4d.** Host setup: one documented way to install the dependencies and
-  build the native extensions. Networking needs either a path that works
-  without administrator rights or a clear one-time setup step.
+  build the native extensions. Networking works without administrator
+  rights, through a user-mode network built into the simulator (decided
+  2026-11-24).
 - **4e.** Privacy on the host (decision 40). The command creates each
   configuration's images and files readable only by the user's own host
   account, keeps debugging access to a running session off unless the
   user turns it on, and writes no secret into a log, profile or snapshot.
+  The machine reaches the internet but not the user's own computer or
+  local network, unless the configuration's settings allow it, and then
+  the command and Desk warn of the danger at every start.
 
 Done when, on a clean Linux machine and following `README.md`, `run` boots
 the canonical Desktop configuration from recorded commits, and the physical

@@ -5,8 +5,9 @@ lists, builds and runs any configuration, with the host privacy that
 decision 40 adds as item 4e. It was written on 2026-11-24 from read-only
 surveys of MegaPad 42e09564, Akashic c43b39cf, LM1 71049c0 and this
 repository at 585deac, plus a few small measurements that section 6 lists.
-Everything in it is a proposal awaiting approval. The decisions it needs are
-in section 4; PLAN.md changes only once they are taken.
+Everything in it is a proposal awaiting approval, except the networking
+choice (C7), decided on 2026-11-24. The decisions it needs are in section 4;
+PLAN.md changes only once they are taken.
 
 Part 4 is done, as PLAN.md states, when `run` boots the canonical Desktop
 configuration from recorded commits on a clean Linux machine by following
@@ -134,13 +135,12 @@ with 8.8.8.8 for DNS. On record, MegaPad's `tests/test_live_net.py` and
 Akashic's `test_live_multi_conn.py` skip all their tests for want of TAP, and
 `test_live_web.py` runs nothing.
 
-Ubuntu 24.04 packages passt (universe, depending only on libc), a user-mode
-network daemon for virtual machines under GPL-2.0-or-later, and libslirp
-4.7.0 (main, depending on GLib). Neither is installed here. passt is packaged
-from Ubuntu 23.04 on, in Debian 12 and in Fedora. It needs no privileges,
-gives the guest through DHCP the address, gateway and DNS servers named on
-its command line (the host's own by default), and forwards chosen host
-ports, which can be bound to 127.0.0.1, into the guest.
+Ubuntu 24.04 packages libslirp 4.7.0 (main, depending on GLib), the
+user-mode network QEMU uses, under the BSD-3-Clause and MIT licences; it is
+not installed here. Its `SlirpConfig` has one setting that limits where the
+guest may connect, `disable_host_loopback`, which refuses connections to the
+host's 127.0.0.1 and nothing else. Its protocol emulation (`enable_emu`),
+which its header calls unsafe, stays off unless asked for.
 
 ### Test selection
 
@@ -375,7 +375,18 @@ replace the first three and never touch the user volume. `--data-dir` and
   account owns or can read.
 - The socket lives in a private folder: `$XDG_RUNTIME_DIR/fantasy-engine/`,
   or the 0700 folder that MegaPad's `runtime_paths.py` already creates and
-  checks. passt's socket goes there too.
+  checks.
+- The machine reaches the internet and nothing local by default. The
+  network device refuses the guest's packets to the user's own computer and
+  to local addresses: loopback, the private, shared and link-local ranges,
+  and their IPv6 counterparts. That covers more than libslirp's
+  `disable_host_loopback`, which the device also sets. A configuration
+  setting, `local_access` (proposed name), opens them for a power user who
+  tests Desk against local services. With it on, `run` prints a warning
+  that any program on the machine, including an installed applet or code
+  that a feed or page leads it to run, can then reach services on the
+  user's computer and local network that expect only local callers. Desk
+  shows the same warning at every start, from its system settings.
 - MegaPad's client refuses a socket another account owns and checks the
   server's user through `SO_PEERCRED` before sending anything, so a socket
   planted by another account cannot collect keystrokes.
@@ -396,12 +407,12 @@ The documented way, from source until Part 11 ships prebuilt parts:
 
 1. Install `uv`, which needs no administrator rights and provides Python
    3.13 where the system lacks it.
-2. Have git, a C++17 compiler with make, e2fsprogs 1.47.0 or later, and
-   fontconfig fonts, with passt for networking. Desktop systems usually
-   carry e2fsprogs and fontconfig already. Installing the rest takes
-   administrator rights once (on Ubuntu, `sudo apt install git
-   build-essential passt`); passt can instead be built in the user's own
-   folders, and Part 11's prebuilt parts remove the need for the compiler.
+2. Have git, a C++17 compiler with make, e2fsprogs 1.47.0 or later,
+   fontconfig fonts, and libslirp's development files, which bring GLib's.
+   Desktop systems usually carry e2fsprogs, fontconfig and GLib already.
+   Installing the rest takes administrator rights once (on Ubuntu, `sudo apt
+   install git build-essential libslirp-dev`), and Part 11's prebuilt parts
+   remove the need for the compiler and the development files.
 3. Install the command from this repository with `uv`, which also brings
    pygame and Pillow.
 4. `fantasy-engine doctor` (proposed name) checks each requirement and says
@@ -414,21 +425,30 @@ development builds keep their own flags, so nothing on record reruns.
 ### Networking without administrator rights (4d)
 
 The simulator first needs a network device. Its four network words take a
-host frame backend from the server: `--nic passt:SOCKET` or `--nic tap:IF`.
-The hook sits in `simulator/core_words.py`, a one-time change that reruns
-382 units (1.26 h); the device itself goes in a module that is imported only
+host frame backend from the server: `--nic slirp` or `--nic tap:IF`. The
+hook sits in `simulator/core_words.py`, a one-time change that reruns 382
+units (1.26 h); the device itself goes in a module that is imported only
 when a backend is configured, so later changes rerun only the network tests.
-The backends live in `nic_backends.py`, which the emulator already uses.
+The TAP backend lives in `nic_backends.py`, which the emulator already uses,
+and the slirp backend joins it in MegaPad's native extension.
 
-passt is the user-mode path. It runs without privileges and turns the
-guest's Ethernet frames into ordinary host connections, with DHCP, DNS
-forwarding and chosen inbound ports. The command starts it in the private
-runtime folder, gives the guest the addresses `networking.f` expects, and
-binds forwards, such as Publishing's web server, to 127.0.0.1. TAP stays
-documented as the alternative for anyone who wants the machine on their
-local network, at the cost of a one-time `sudo` setup. The live tests gain
-the passt backend, so they run wherever passt is installed; they reach real
-servers, so they run on request.
+libslirp is the user-mode path (decided 2026-11-24). Linked into MegaPad's
+native extension, it needs nothing else installed or started and leaves no
+socket file to protect. It runs without privileges and turns the guest's
+Ethernet frames into ordinary connections from the user's own account, with
+DHCP, DNS forwarding and chosen inbound ports. It also runs on macOS and
+Windows, should a later release reach them. The command gives the guest the
+addresses `networking.f` expects and binds forwards, such as Publishing's web
+server, to 127.0.0.1. Its packet handling runs inside the simulator's
+process, which holds the guest's secrets, so the device turns on only what
+the guest uses (DHCP, DNS and NAT), leaves libslirp's TFTP server and
+protocol emulation off, and refuses local destinations unless the
+configuration allows them (section 2, privacy on the host).
+
+TAP stays documented as the alternative for anyone who wants the machine on
+their local network, at the cost of a `sudo` setup after each boot. The live
+tests gain the slirp backend, so they run on any machine with libslirp; they
+reach real servers, so they run on request.
 
 ## 3. Stages
 
@@ -445,9 +465,9 @@ runs, journeys and checks.
 | 4 | The command | 8–14 | 20 min | 1, 3 | 5, 6, 8 |
 | 5 | Privacy on the host | 6–10 | 20 min | 2, 4 | 8 |
 | 6 | Host setup | 4–8 | 20 min | 1, 4 | 8 |
-| 7 | Networking without administrator rights | 12–24 | 1.5 h | 1; 4 for the command's part | Part 6 step 2 |
+| 7 | Networking without administrator rights | 15–29 | 1.5 h | 1; 4 for the command's part | Part 6 step 2 |
 | 8 | README, journey through the command, clean machine, full run | 6–10 | 4 h | all | Part 4's end |
-| | **Total** | **58–107** | **about 10.5 h** | | |
+| | **Total** | **61–112** | **about 10.5 h** | | |
 
 The final set at Part 4's end, the four ext4 files on the emulator and
 MegaPad's system test, adds about 2 hours and peaks near 8 GiB, so it runs
@@ -539,19 +559,22 @@ repository's units and two journeys for the speed comparison (about 5 min).
 
 ### Stage 7. Networking without administrator rights
 
-The simulator's network device, the passt backend behind the `--nic` option
-of stage 2, passt started by the command, and the live tests on either
-backend. The harness already passes `--nic` through, so nothing here reruns
-its 163 units.
+The simulator's network device, the slirp backend behind the `--nic` option
+of stage 2, the refusal of local destinations with the `local_access`
+setting and its two warnings, and the live tests on either backend. The
+harness already passes `--nic` through, so nothing here reruns its 163 units.
 
 Done when the simulator passes frames both ways under the same contract the
-BIOS words have on the emulator, and a Desk session on the simulator fetches
-a public HTTPS page through passt without administrator rights. Gate: the
-closing run (382 units for the hook, about 1.5 h) and the network tests; the
-live tests and the live Desk check run on request, and need passt installed,
-which takes `sudo apt install passt` once or a build in the user's own
-folders. They should follow the TLS round's change to a standard set of web
-roots, which they exercise.
+BIOS words have on the emulator; a Desk session on the simulator fetches a
+public HTTPS page through libslirp without administrator rights; and tests
+show the guest's connections to the user's computer and local addresses
+refused by default, and allowed with both warnings shown when the setting is
+on. Gate: the closing run (382 units for the hook, about 1.5 h) and the
+network tests; the live tests and the live Desk check run on request, since
+they reach real servers. They should follow the TLS round's change to a
+standard set of web roots, which they exercise. The first prototype confirms
+libslirp's DHCP and DNS hand the guest settings `networking.f` accepts, and
+that its timers keep pace with the simulator's real-time clock.
 
 ### Stage 8. Documentation, the journey through the command, a clean machine
 
@@ -623,15 +646,13 @@ Recommended: (a), since 1.47.0 measured identical apart from a write counter.
 Cost: about 2 hours inside stage 2. The alpha's hosts then start at Ubuntu
 24.04, Debian 12 and current Fedora.
 
-**C7. Networking without administrator rights.** Every option first needs
-the simulator's network device (6 to 10 of stage 7's hours). Options: (a)
-passt, installed by the user and run without privileges, GPL-2.0-or-later as
-a separate program like e2fsprogs, with TAP documented as the alternative;
-(b) libslirp linked into MegaPad's native extension, which brings GLib (LGPL)
-into the build and the run; (c) TAP only, with its one-time `sudo` setup and
-NAT rules; (d) a user-mode network written for MegaPad, which needs nothing
-installed but costs 40 to 80 hours. Recommended: (a). Cost: 12 to 24 agent
-hours for stage 7.
+**C7. Networking without administrator rights.** Decided 2026-11-24:
+libslirp, linked into MegaPad's native extension, with TAP documented as the
+alternative. It brings GLib (LGPL) into the build and the run. The machine
+reaches only the internet by default, and the `local_access` setting opens
+the user's computer and local network for a power user, with a warning from
+the command and from Desk at every start. Cost: 15 to 29 agent hours for
+stage 7, of which the network device is 6 to 10.
 
 **C8. Debugging access in MegaPad's own server.** Options: (a) off unless
 `--debug-access`, everywhere, with each launcher whose client reads guest
@@ -706,9 +727,11 @@ none.
 - **Networking that has never run on the simulator.** `networking.f` has run
   only on the emulator, and its timers and polling may behave differently on
   the simulator's real-time clock.
-- **passt details.** The frames cross passt's socket in the framing of QEMU's
-  stream back-end, which the first prototype confirms. Ubuntu 22.04 lacks
-  passt as well as e2fsprogs 1.47.
+- **libslirp inside the simulator.** Its packet handling runs in the
+  process that holds guest memory, so a flaw in it could reach the machine's
+  secrets. The device limits what it turns on and filters local
+  destinations itself, and MegaPad's builds track libslirp's security
+  releases.
 - **Secrets in host swap.** Guest memory lives in the server process, which
   the host may page to disk; this machine has 30.5 GB of swap on its drive.
   The command cannot lock 384 MiB of guest memory, so the guide recommends
@@ -747,10 +770,10 @@ none.
 - Built the three native parts and the canonical Desktop's shipping form from
   `git archive` copies in `/dev/shm`, timed with `/usr/bin/time`, and read
   the modes and allocated sizes of the files written.
-- Checked this machine's packages and settings: Ubuntu 24.04.5, passt and
-  libslirp available but not installed, no container tools or `uv`, the
+- Checked this machine's packages and settings: Ubuntu 24.04.5, libslirp
+  available but not installed, no container tools or `uv`, the
   user-namespace restriction, Yama's ptrace scope 1, and umask 0002.
-- Read passt's manual for its licence, options and address handling, and
-  Launchpad for its Ubuntu releases and for e2fsprogs 1.47.0's update to
-  Ubuntu 22.04, which was proposed and never released.
+- Read libslirp 4.7.0's `libslirp.h` for its configuration and its Debian
+  copyright file for its licences, and Launchpad for e2fsprogs 1.47.0's
+  update to Ubuntu 22.04, which was proposed and never released.
 - No test unit and no journey ran for this plan.
