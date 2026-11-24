@@ -10,7 +10,7 @@
 
 [megapad]
 repository = "https://github.com/dgoldman0/megapad.git"
-commit = "42e0956472e28fcbdd6ed989981f4501c594f8a1"
+commit = "6689ab57c6f93fecf7eee780503a793dff04c06c"
 
 [akashic]
 repository = "https://github.com/dgoldman0/akashic.git"
