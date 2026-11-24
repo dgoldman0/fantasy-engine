@@ -249,7 +249,7 @@ def fake_components(workspace: Path, *, megapad_build: str) -> dict[str, tuple[s
             "lm1": ("unused", lm1)}
 
 
-MEGAPAD_BUILD = ("build:\n\t$(VENV_PY) -c \"import sysconfig; "
+MEGAPAD_BUILD = ("simulator-accel:\n\t$(VENV_PY) -c \"import sysconfig; "
                  "open('built-for', 'w').write(sysconfig.get_config_var('SOABI'))\"\n"
                  "\techo \"$$MP64_MARCH $$PYTHONDONTWRITEBYTECODE\" > built-with\n")
 
@@ -274,6 +274,8 @@ def test_build_assembles_every_component_and_builds_each_once(tmp_path, monkeypa
     assert (megapad / "built-with").read_text().split() == ["x86-64-v2", "1"]
     stamp = json.loads((megapad / f".fantasy-engine-native.{abi}.json").read_text())
     assert stamp["march"] == components.NATIVE_MARCH == "x86-64-v2"
+    # Only the simulator's parts: the command offers no emulator yet.
+    assert stamp["target"] == "simulator-accel"
     assert (lm1 / "chiplet" / "build" / "megapad-root").read_text().strip() == str(megapad)
 
     # A second build finds everything done, without taking a tree's lock, so
@@ -289,13 +291,13 @@ def test_build_assembles_every_component_and_builds_each_once(tmp_path, monkeypa
 def test_a_failed_build_is_reported_and_left_unrecorded(tmp_path, monkeypatch, capsys):
     workspace = tmp_path / "workspace"
     lock = write_lock(tmp_path / "components.toml",
-                      fake_components(workspace, megapad_build="build:\n\texit 3\n"))
+                      fake_components(workspace, megapad_build="simulator-accel:\n\texit 3\n"))
     monkeypatch.setenv("FE_WORKSPACE", str(workspace))
     monkeypatch.setattr(components, "_require_pybind11", lambda python: None)
     cache = tmp_path / "cache"
 
     assert command.main(["prepare", "--components", str(lock), "--cache-dir", str(cache)]) == 1
-    assert "building MegaPad's native extensions" in capsys.readouterr().err
+    assert "building MegaPad's simulator extensions" in capsys.readouterr().err
     assert not list(cache.glob("components/megapad-*/.fantasy-engine-native.*"))
 
 

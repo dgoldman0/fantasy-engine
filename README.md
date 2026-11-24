@@ -233,6 +233,6 @@ whose WSLg shows the viewer's window. Installing takes four steps.
    nothing.
 
 `fantasy-engine run desktop` then builds the Desktop and opens it in a window.
-The first run also builds the native parts, which takes a few minutes.
+The first run also builds the native parts, which takes about a minute.
 Before you keep anything of your own on the machine, read how to keep its
 files safe in [docs/getting-started.md](docs/getting-started.md).

@@ -418,9 +418,10 @@ The documented way, from source until Part 11 ships prebuilt parts:
 4. `fantasy-engine doctor` (proposed name) checks each requirement and says
    what to do about any that is missing.
 
-The command builds every native part for x86-64-v2, as LM1's module already
-is, so what a user builds matches what Part 11 will ship. The workspace's
-development builds keep their own flags, so nothing on record reruns.
+The command builds every native part a run uses for x86-64-v2, as LM1's
+module already is, so what a user builds matches what Part 11 will ship.
+The workspace's development builds keep their own flags, so nothing on
+record reruns.
 
 ### Networking without administrator rights (4d)
 
@@ -709,13 +710,20 @@ Recommended: keep the move pure. Cost of splitting now: 10 to 20 more hours.
 **C15. Native build flags.** Options: (a) the command builds all three
 native parts for x86-64-v2, as Part 11 will ship them; (b) keep
 `-march=native` for `_mp64_accel` in the command's builds. Recommended: (a),
-once the speed check of stage 6 shows no loss. Cost: about 2 hours.
+once the speed check of stage 6 shows no loss. Cost: about 2 hours. Under
+C16 the command builds only the parts a run of the simulator loads:
+`_megaforth_native` with the network module `_mp64_slirp`, through
+MegaPad's `make simulator-accel`, and LM1's chiplet module, all for
+x86-64-v2 (decided 2026-11-24). `_mp64_accel` joins them, built the same
+way, when the emulator backend is offered.
 
 **C16. The emulator in the command.** The Desktop fails on the emulator
 today, a known failure from before this round. Options: (a) the simulator
 only in Part 4, with `--backend emulator` once that failure is fixed; (b)
 offer the emulator now for small configurations. Recommended: (a). Cost:
-none.
+none. With the simulator alone, the command leaves out `_mp64_accel`, which
+no run loads and which costs 51 s and 1.9 GB at each preparation of a new
+MegaPad commit (decided 2026-11-24).
 
 ## 5. Risks
 

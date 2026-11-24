@@ -7,13 +7,16 @@ writes a component's tree at exactly that commit into the cache: through
 commit, and otherwise from a shallow fetch of that one commit.  A checkout's
 uncommitted changes and its current branch therefore never reach a build.
 
-``build_native`` then builds the native parts in the assembled trees with
-each component's own build: MegaPad's ``make build``, for the Python that
-runs this command, and LM1's chiplet Makefile, against the assembled
-MegaPad.  Every part is compiled for the release's x86-64-v2 baseline, so
-what a person builds matches what prebuilt releases ship.  LM1's chiplet
-module compiles MegaPad's header in, so LM1's tree is kept apart for each
-MegaPad commit it is built against.
+``build_native`` then builds the native parts a run uses in the assembled
+trees with each component's own build: MegaPad's ``make simulator-accel``,
+the simulator's executor and network for the Python that runs this command,
+and LM1's chiplet Makefile, against the assembled MegaPad.  The command
+offers only the simulator (Part 4's choice C16), whose runs never load the
+emulator's accelerator, so ``make build``, which adds that accelerator,
+waits for the emulator backend.  Every part is compiled for the release's
+x86-64-v2 baseline, so what a person builds matches what prebuilt releases
+ship.  LM1's chiplet module compiles MegaPad's header in, so LM1's tree is
+kept apart for each MegaPad commit it is built against.
 
 Everything here lives under the cache folder, in folders that only the
 user's own account can open (PLAN.md decision 40).
@@ -50,6 +53,8 @@ COMPONENT_NAMES = ("megapad", "akashic", "lm1")
 # The processor level the command builds every native part for: the
 # release's baseline (PLAN.md decision 23), for which LM1's chiplet module
 # is always built and MegaPad's extensions are built when MP64_MARCH names it.
+# MegaPad's build target for the parts a run of the simulator uses.
+MEGAPAD_NATIVE_TARGET = "simulator-accel"
 NATIVE_MARCH = "x86-64-v2"
 # What x86-64-v2 adds to the first x86-64 processors, as Linux names the
 # features in /proc/cpuinfo: CMPXCHG16B, LAHF and SAHF in 64-bit mode,
@@ -333,12 +338,12 @@ def native_stamps(trees: dict[str, Path], abi: str) -> tuple[Path, Path]:
 
 def build_native(trees: dict[str, Path], *, python: str = sys.executable,
                  log: Log = print) -> None:
-    """Build the native parts in the assembled TREES with each component's
-    own build, for NATIVE_MARCH: MegaPad's extensions for PYTHON, and LM1's
-    chiplet module against the assembled MegaPad.  A tree whose build is
-    already recorded, for this Python where that matters, is left as it is.
-    Each build holds its tree's lock, so two commands never build in one
-    tree at once."""
+    """Build the native parts a run uses in the assembled TREES with each
+    component's own build, for NATIVE_MARCH: MegaPad's simulator extensions
+    for PYTHON, and LM1's chiplet module against the assembled MegaPad.  A
+    tree whose build is already recorded, for this Python where that
+    matters, is left as it is.  Each build holds its tree's lock, so two
+    commands never build in one tree at once."""
 
     abi = sysconfig.get_config_var("SOABI") if python == sys.executable else _abi(python)
     megapad, lm1 = trees["megapad"], trees["lm1"]
@@ -350,9 +355,10 @@ def build_native(trees: dict[str, Path], *, python: str = sys.executable,
     with _locked(megapad.parent / f".{megapad.name}.lock"):
         if not megapad_stamp.exists():
             _require_pybind11(python)
-            _run_build(["make", "-C", str(megapad), "build", f"VENV_PY={python}"],
-                       f"MegaPad's native extensions for {abi}", log)
-            _write_stamp(megapad_stamp, {"python": python, "abi": abi, "march": NATIVE_MARCH})
+            _run_build(["make", "-C", str(megapad), MEGAPAD_NATIVE_TARGET, f"VENV_PY={python}"],
+                       f"MegaPad's simulator extensions for {abi}", log)
+            _write_stamp(megapad_stamp, {"python": python, "abi": abi, "march": NATIVE_MARCH,
+                                         "target": MEGAPAD_NATIVE_TARGET})
     with _locked(lm1.parent / f".{lm1.name}.lock"):
         if not lm1_stamp.exists():
             _run_build(["make", "-C", str(lm1 / "chiplet"), f"MEGAPAD_ROOT={megapad}"],
@@ -372,7 +378,7 @@ def _abi(python: str) -> str:
 def _require_pybind11(python: str) -> None:
     result = subprocess.run([python, "-c", "import pybind11"], capture_output=True)
     if result.returncode != 0:
-        raise ComponentError(f"MegaPad's native extensions build with pybind11, which "
+        raise ComponentError(f"MegaPad's simulator extensions build with pybind11, which "
                              f"{python} cannot import; install it into that Python")
 
 

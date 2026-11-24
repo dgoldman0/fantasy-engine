@@ -271,7 +271,7 @@ def trees(*, workspace: Path | None, lock_file: Path, cache_dir: Path | None,
         findings.append(Finding("native parts", OK, f"built for {abi} and {components.NATIVE_MARCH}"))
     else:
         findings.append(Finding("native parts", ADVICE, "not built yet",
-                                "The first build or run builds them, which takes a few minutes."))
+                                "The first build or run builds them, which takes about a minute."))
     return findings, found
 
 
