@@ -14,7 +14,7 @@ commit = "411c2a613420736457d604cee1cb2817df15ed29"
 
 [akashic]
 repository = "https://github.com/dgoldman0/akashic.git"
-commit = "6efeb52610a171aefb16d656e2fc09199dd79745"
+commit = "a8e9bb175afbddaf9409f4df9a9cd862cf82b11f"
 
 [lm1]
 repository = "https://github.com/dgoldman0/lisp-machine-LM1.git"
