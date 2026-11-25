@@ -10,12 +10,12 @@
 
 [megapad]
 repository = "https://github.com/dgoldman0/megapad.git"
-commit = "f18469703ad8f003c12f1e72164291b25343fa93"
+commit = "411c2a613420736457d604cee1cb2817df15ed29"
 
 [akashic]
 repository = "https://github.com/dgoldman0/akashic.git"
-commit = "772ac65046e8164c3c573aa5ff2db9c3720ab480"
+commit = "6efeb52610a171aefb16d656e2fc09199dd79745"
 
 [lm1]
 repository = "https://github.com/dgoldman0/lisp-machine-LM1.git"
-commit = "71049c0392292370b27937076db51039f7a2b406"
+commit = "800cf80ca2eff9ff048580a6cad5b47c0a5df9bb"
