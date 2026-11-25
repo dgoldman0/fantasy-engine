@@ -400,6 +400,10 @@ All were taken on 2026-10-27, except decisions 35 and 36, taken on
     verify servers against a standard set of web root certificates, so
     feeds from any site work. Keeping applets apart from one another waits
     for a later release.
+41. The first release's Agent works with at least the two leading AI
+    providers, OpenAI and Anthropic (decided 2026-11-25). The user picks the
+    provider in the Agent's settings and gives its key or sign-in, which
+    lives only in memory (decision 40).
 
 ## 3. Open decisions
 
