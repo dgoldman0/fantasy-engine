@@ -153,11 +153,12 @@ applications also run in a plain text terminal.
 ## Where it stands
 
 Fantasy Engine is in development, and everything in it is still a rough draft.
-The desktop and its applications already run in MegaPad's simulator, in builds
-made for development and testing, while LM1 runs separately in an emulator of
-its own. The first release, version 0.1.0, is an alpha now being built. That
-release will be one system you can install, with its four Practices, a
-`fantasy-engine` command that builds and runs them, LM1 working beside
+The desktop and its applications run in MegaPad's simulator, and the
+`fantasy-engine` command builds and runs them from source, as the sections
+below describe. LM1's model sits beside MegaPad in every machine the command
+runs, though the system software does not use it yet. The first release,
+version 0.1.0, is an alpha now being built. That release will be one system
+you can install, with its four Practices, prebuilt parts, LM1 working beside
 MegaPad, and storage in ext4, so your files are kept on a disk that your PC's
 own tools can open and check. It will run on 64-bit Intel and AMD PCs under
 Linux, and under Windows through WSL2; macOS comes later. Its code, hardware
@@ -232,7 +233,24 @@ whose WSLg shows the viewer's window. Installing takes four steps.
    commits this repository records, about 150 MB once unpacked, and it builds
    nothing.
 
-`fantasy-engine run desktop` then builds the Desktop and opens it in a window.
-The first run also builds the native parts, which takes about a minute.
-Before you keep anything of your own on the machine, read how to keep its
-files safe in [docs/getting-started.md](docs/getting-started.md).
+## Running
+
+```
+fantasy-engine list
+fantasy-engine run desktop
+fantasy-engine new mine desktop
+```
+
+`list` shows the configurations: the Desktop, which ships with Fantasy
+Engine, and any of your own, each with whether it is built. `run desktop`
+builds the Desktop's volumes, starts the machine and opens it in a window, and
+closing the window stops it. The first run also builds the native parts,
+which takes about a minute. The machine keeps your documents between runs,
+and `run` builds the system's volumes again only when what they were built
+from changes. `new mine desktop` copies the Desktop's configuration under a
+name of your own, for you to edit and run with `fantasy-engine run mine`.
+
+[docs/getting-started.md](docs/getting-started.md) describes each step and
+the configuration file. Before you keep anything of your own on a machine,
+read its section on keeping the machine's files safe: the machine has no
+accounts, so whoever can read those files can read everything it holds.
