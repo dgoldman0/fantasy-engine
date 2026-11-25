@@ -108,16 +108,43 @@ describes every setting and its default.
 Each configuration keeps its machine in one folder:
 `~/.local/share/fantasy-engine/configurations/NAME/`. The folder holds the
 machine's volumes. The user volume among them holds your documents, your
-Practice and records, and any sign-in the Agent or Streams keeps. The machine
-has no accounts or passwords of its own. Whoever can read the folder can read
-everything the machine holds, and whoever can write to it can change what the
-machine runs. Treat the folder as you would a file of passwords.
+Practice and the records your applets keep. The machine has no accounts of
+its own and encrypts none of those files, so whoever can read the folder can
+read them all, and whoever can write to it can change what the machine runs,
+down to the prompt that asks for your passphrase. Treat the folder as you
+would a file of passwords.
+
+Sign-ins are the exception. The Agent holds its provider's key or sign-in in
+memory only, so you give it again each time the machine starts. An applet
+that saves a sign-in to an account seals the account's tokens under the
+machine's keyring, which only your passphrase opens. Desk asks you to choose
+the passphrase the first time an applet has a sign-in to save, and you type
+it twice; it must be at least 8 characters long. After each start, Desk asks
+for the passphrase the first time an applet needs a saved sign-in, and Esc
+puts the question off until an applet asks again. The keyring then stays
+unlocked until you lock it or the machine stops. Unlocking takes several
+seconds, and a notice shows how far it has come. Alt+K opens the keyring's
+screen, where you can set the passphrase up before anything asks, unlock or
+lock the keyring, or change the passphrase. A changed passphrase keeps every
+saved sign-in.
+
+Those seconds of work slow down anyone who copies the folder and tries
+passphrases against the keyring, but their computer can try them far faster
+than the machine can, so the passphrase's length is what keeps them out.
+Choose four or more words picked at random, never a phrase someone could
+guess. Nothing else opens the keyring: it keeps no second copy of its key and
+asks no recovery question. If you lose the passphrase, every sign-in sealed
+under it is lost. Choose Start over on the keyring's screen to set up a new
+passphrase, then sign in to those accounts again; your documents and records
+stay as they are.
 
 fantasy-engine makes the folder and its files readable by your account alone,
 and `run` refuses to start a machine whose files another account could read or
 write. Keep them that way. Back the folder up as you would back up passwords,
-and keep any copy somewhere as private as the folder itself. A shared or
-synced folder gives the machine to everyone who can read that folder.
+and keep any copy somewhere as private as the folder itself. A copy holds the
+keyring as it was when you made the copy, so it opens with the passphrase you
+had then. A shared or synced folder gives the machine to everyone who can read
+that folder.
 
 While a machine runs, its server listens in your private runtime folder, and
 the viewer talks only to a server that runs as you. Everything else a run

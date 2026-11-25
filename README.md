@@ -251,6 +251,7 @@ from changes. `new mine desktop` copies the Desktop's configuration under a
 name of your own, for you to edit and run with `fantasy-engine run mine`.
 
 [docs/getting-started.md](docs/getting-started.md) describes each step and
-the configuration file. Before you keep anything of your own on a machine,
-read its section on keeping the machine's files safe: the machine has no
-accounts, so whoever can read those files can read everything it holds.
+the configuration file. The machine keeps your documents unencrypted, so
+anyone who holds its files can read them, and it seals the sign-ins it saves
+under a passphrase you choose. Before you keep anything of your own on a
+machine, read the guide's section on keeping its files safe.
