@@ -284,6 +284,18 @@ def test_a_configuration_another_command_holds_is_refused(tmp_path, capsys):
         pass
 
 
+def test_the_commands_lines_reach_a_pipe_as_it_prints_them(tmp_path, monkeypatch):
+    """A driver reads where a machine serves from the command's output while
+    the command runs, so each line must leave the buffer when printed."""
+
+    import io
+
+    written = io.BytesIO()
+    monkeypatch.setattr(command.sys, "stdout", io.TextIOWrapper(written, encoding="utf-8"))
+    assert command.main(["list", "--data-dir", str(tmp_path)]) == 0
+    assert b"desktop  (shipped, not built)" in written.getvalue()
+
+
 def test_the_command_creates_files_for_the_user_alone(tmp_path, monkeypatch):
     seen = []
     monkeypatch.setitem(command._COMMANDS, "list",

@@ -155,6 +155,11 @@ _COMMANDS = {"list": _list, "build": _build, "run": _run, "new": _new, "doctor":
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Each line the command prints reaches a pipe or a file at once, as it
+    # reaches a terminal, so whoever reads the output, a journey's driver
+    # among them, learns where a machine serves while it still runs.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
     args = _parser().parse_args(argv)
     # Whatever the command and the programs it starts create is the user's
     # alone; the image tool and the server also set their files' modes.
